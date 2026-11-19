@@ -1,0 +1,2026 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>نظام إدارة الحضور الإلكتروني - قسم المحاسبة (2026-2027)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+      background-color: #f1f5f9;
+      color: #0f172a;
+    }
+    .status-btn {
+      transition: all 0.15s ease-in-out;
+    }
+    .status-btn:active {
+      transform: scale(0.95);
+    }
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #e2e8f0;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #94a3b8;
+      border-radius: 4px;
+    }
+    @media print {
+      .no-print { display: none !important; }
+      body { background: white; }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- الشريط العلوي -->
+  <header class="bg-gradient-to-l from-slate-900 via-blue-950 to-slate-900 text-white shadow-lg sticky top-0 z-40 no-print">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="bg-amber-500/20 border border-amber-400/40 p-2 rounded-xl text-amber-400 text-2xl">
+          🎓
+        </div>
+        <div>
+          <h1 class="text-lg md:text-xl font-extrabold tracking-tight">نظام إدارة الحضور الإلكتروني - قسم المحاسبة (2026-2027)</h1>
+          <p class="text-xs text-blue-200">كلية الإدارة والاقتصاد • البوابة الأكاديمية الذكية</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap">
+        <!-- مؤشر حالة السحابة -->
+        <div id="cloudStatusBadge" onclick="requestProtectedTab('settings')" class="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-slate-800 border border-slate-700 text-emerald-300 hover:bg-slate-700 transition" title="حالة الاتصال بملف Google Sheets">
+          <span id="cloudDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span id="cloudText">السحابة متصلة (Sheets)</span>
+        </div>
+
+        <!-- التبويبات -->
+        <nav class="flex bg-slate-800/80 p-1 rounded-xl border border-slate-700">
+          <button onclick="switchTab('prof')" id="tab-prof" class="px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-bold transition bg-blue-600 text-white shadow">
+            👨‍🏫 واجهة الأستاذ
+          </button>
+          <button onclick="requestProtectedTab('chair')" id="tab-chair" class="px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-bold transition text-slate-300 hover:text-white flex items-center gap-1">
+            <span>📊 لوحة رئيس القسم</span>
+            <span id="lock-icon-chair" class="text-amber-400 text-xs">🔒</span>
+          </button>
+          <button onclick="requestProtectedTab('settings')" id="tab-settings" class="px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-bold transition text-slate-300 hover:text-white flex items-center gap-1">
+            <span>⚙️ إدارة البيانات</span>
+            <span id="lock-icon-settings" class="text-amber-400 text-xs">🔒</span>
+          </button>
+        </nav>
+
+        <!-- زر قفل اللوحة السريع -->
+        <button id="lockSessionBtn" onclick="lockAdminSession()" class="hidden bg-rose-600/90 hover:bg-rose-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow transition flex items-center gap-1">
+          🔒 قفل اللوحة
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- المحتوى الرئيسي -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
+
+    <!-- ==================== 1. واجهة الأستاذ التدريسي ==================== -->
+    <section id="view-prof" class="space-y-6">
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+        <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+          <h2 class="text-base md:text-lg font-bold text-slate-800 flex items-center gap-2">
+            <span class="text-blue-600">▼</span> تحديد المحاضرة والشعبة الدراسية
+          </h2>
+          <span class="text-xs bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-semibold">
+            يعتمد التوزيع الفعلي (عمود: الدوام مع)
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div class="lg:col-span-2">
+            <label class="block text-xs font-bold text-slate-600 mb-1.5">اسم الأستاذ التدريسي</label>
+            <select id="profSelect" onchange="onProfessorChange()" class="w-full rounded-xl border-slate-300 border bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="ALL">-- عرض الكل / وضع رئيس القسم (جميع المواد) --</option>
+            </select>
+          </div>
+
+          <div class="lg:col-span-2">
+            <label class="block text-xs font-bold text-slate-600 mb-1.5">المادة الدراسية والمرحلة</label>
+            <select id="subjectSelect" onchange="onSubjectChange()" class="w-full rounded-xl border-slate-300 border bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1.5">الدوام الفعلي</label>
+            <select id="shiftSelect" onchange="onShiftOrSectionChange()" class="w-full rounded-xl border-slate-300 border bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="صباحي">صباحي</option>
+              <option value="مسائي">مسائي</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1.5">الشعبة</label>
+            <select id="sectionSelect" onchange="onShiftOrSectionChange()" class="w-full rounded-xl border-slate-300 border bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1.5">تاريخ المحاضرة</label>
+            <input type="date" id="lectureDate" onchange="checkExistingSession()" class="w-full rounded-xl border-slate-300 border bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+
+          <div class="lg:col-span-3">
+            <label class="block text-xs font-bold text-slate-600 mb-1.5">موضوع المحاضرة / رقم المحاضرة (اختياري)</label>
+            <input type="text" id="lectureTopic" placeholder="مثال: المحاضرة الأولى - الإطار المفاهيمي..." class="w-full rounded-xl border-slate-300 border bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+        </div>
+
+        <div id="existingBanner" class="hidden mt-4 bg-amber-50 border border-amber-300 text-amber-900 px-4 py-3 rounded-xl flex flex-wrap items-center justify-between gap-2 text-sm">
+          <div class="flex items-center gap-2">
+            <span>⚠️</span>
+            <span class="font-bold">تم تحميل سجل حضور محفوظ مسبقاً لهذه المادة والشعبة في هذا التاريخ. يمكنك التعديل عليه وحفظ التحديث.</span>
+          </div>
+          <span id="existingLastUpdated" class="text-xs text-amber-700 font-semibold"></span>
+        </div>
+      </div>
+
+      <!-- شريط الأدوات السريع -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="markAllAs('P')" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs md:text-sm font-bold px-3.5 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5">
+            ✅ تحديد الكل حاضر
+          </button>
+          <button onclick="markAllAs('A')" class="bg-rose-600 hover:bg-rose-700 text-white text-xs md:text-sm font-bold px-3.5 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5">
+            ❌ تحديد الكل غائب
+          </button>
+          <div class="relative">
+            <input type="text" id="studentSearchInput" oninput="renderAttendanceList()" placeholder="🔍 بحث باسم الطالب..." class="rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2 text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none w-48 md:w-64" />
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 text-xs md:text-sm font-bold">
+          <span class="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg">👥 العدد الكلي: <span id="countTotal" class="text-slate-900">0</span></span>
+          <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg">🟢 حاضر: <span id="countPresent">0</span></span>
+          <span class="bg-rose-50 text-rose-700 border border-rose-200 px-3 py-1.5 rounded-lg">🔴 غائب: <span id="countAbsent">0</span></span>
+          <span class="bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-lg">🟡 مجاز: <span id="countExcused">0</span></span>
+        </div>
+      </div>
+
+      <!-- جدول الطلبة لتسجيل الحضور -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-right border-collapse">
+            <thead>
+              <tr class="bg-slate-800 text-white text-xs md:text-sm">
+                <th class="py-3.5 px-4 w-12 text-center">#</th>
+                <th class="py-3.5 px-4">اسم الطالب الرباعي</th>
+                <th class="py-3.5 px-3 hidden sm:table-cell text-center">الجنس</th>
+                <th class="py-3.5 px-3 hidden md:table-cell text-center">الدراسة الأصلية</th>
+                <th class="py-3.5 px-4 text-center w-64">حالة الحضور</th>
+              </tr>
+            </thead>
+            <tbody id="attendanceTableBody" class="divide-y divide-slate-100 text-sm">
+            </tbody>
+          </table>
+        </div>
+
+        <div class="bg-slate-50 border-t border-slate-200 p-4 flex flex-wrap items-center justify-between gap-4">
+          <p class="text-xs text-slate-500">
+            ☁️ يتم حفظ السجل وتثبيته مباشرة في قاعدة بيانات Google Sheets لدى رئاسة القسم مع إشعار تأكيد الاستلام.
+          </p>
+          <button id="saveBtn" onclick="saveCurrentLecture()" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-8 py-3 rounded-xl shadow-md hover:shadow-lg transition text-sm md:text-base flex items-center justify-center gap-2">
+            💾 حفظ وإرسال الحضور للسحابة
+          </button>
+        </div>
+      </div>
+
+      <!-- سجل المحاضرات السابقة لهذه الشعبة -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+        <h3 class="text-base font-bold text-slate-800 mb-3 flex items-center gap-2">
+          <span>🕒</span> سجل المحاضرات السابقة لهذه المادة والشعبة
+        </h3>
+        <div id="sectionHistoryList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 2. لوحة متابعة رئيس القسم ==================== -->
+    <section id="view-chair" class="hidden space-y-6">
+      <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+          <div class="text-xs font-bold text-slate-500">إجمالي طلبة القسم</div>
+          <div id="statTotalStudents" class="text-2xl font-extrabold text-slate-800 mt-1">666</div>
+          <div class="text-[11px] text-slate-400 mt-1">صباحي + مسائي</div>
+        </div>
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+          <div class="text-xs font-bold text-slate-500">المحاضرات المسجلة</div>
+          <div id="statTotalLectures" class="text-2xl font-extrabold text-blue-600 mt-1">0</div>
+          <div class="text-[11px] text-slate-400 mt-1">سجل محاضرة إلكتروني</div>
+        </div>
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-amber-200 bg-amber-50/30">
+          <div class="text-xs font-bold text-amber-700">إنذار أولي 🟡</div>
+          <div id="statWarn1" class="text-2xl font-extrabold text-amber-600 mt-1">0</div>
+          <div class="text-[11px] text-amber-600 mt-1">م1-3 (8%) | م4 (5%)</div>
+        </div>
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-orange-200 bg-orange-50/30">
+          <div class="text-xs font-bold text-orange-700">إنذار نهائي 🟠</div>
+          <div id="statWarn2" class="text-2xl font-extrabold text-orange-600 mt-1">0</div>
+          <div class="text-[11px] text-orange-600 mt-1">جميع المراحل (10%)</div>
+        </div>
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-rose-200 bg-rose-50/30 col-span-2 lg:col-span-1">
+          <div class="text-xs font-bold text-rose-700">فصل بالغياب 🔴</div>
+          <div id="statExpelled" class="text-2xl font-extrabold text-rose-600 mt-1">0</div>
+          <div class="text-[11px] text-rose-600 mt-1">م1-3 (14%) | م4 (15%)</div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4 border-b border-slate-100 pb-3">
+          <div>
+            <h2 class="text-lg font-bold text-slate-800">📊 تقرير الغيابات والإنذارات الأكاديمية</h2>
+            <p class="text-xs text-slate-500 mt-0.5">تُحتسب النسب من أصل <strong id="displayCourseLectures" class="text-blue-700">15</strong> محاضرة خلال الكورس الدراسي</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button onclick="syncFromCloud(true)" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5">
+              🔄 تحديث البيانات من السحابة
+            </button>
+            <button onclick="exportReportCSV()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5">
+              📥 تصدير التقرير إلى Excel
+            </button>
+            <button onclick="window.print()" class="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5">
+              🖨️ طباعة
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">المرحلة</label>
+            <select id="chairStageFilter" onchange="onChairFilterChange()" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold">
+              <option value="ALL">جميع المراحل</option>
+              <option value="الثانية">المرحلة الثانية</option>
+              <option value="الثالثة">المرحلة الثالثة</option>
+              <option value="الرابعة">المرحلة الرابعة</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">الدوام الفعلي</label>
+            <select id="chairShiftFilter" onchange="onChairFilterChange()" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold">
+              <option value="ALL">الصباحي والمسائي</option>
+              <option value="صباحي">صباحي</option>
+              <option value="مسائي">مسائي</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">الشعبة</label>
+            <select id="chairSectionFilter" onchange="onChairFilterChange()" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold">
+              <option value="ALL">جميع الشعب</option>
+              <option value="A">شعبة A</option>
+              <option value="B">شعبة B</option>
+              <option value="C">شعبة C</option>
+              <option value="D">شعبة D</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">المادة الدراسية</label>
+            <select id="chairSubjectFilter" onchange="renderChairReport()" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold">
+              <option value="ALL">جميع المواد (تراكمي)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">حالة الإنذار</label>
+            <select id="chairStatusFilter" onchange="renderChairReport()" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold">
+              <option value="ALL">جميع الطلبة</option>
+              <option value="ALERTS_ONLY">جميع الإنذارات والفصل</option>
+              <option value="EXPELLED">فصل بالغياب فقط 🔴</option>
+              <option value="WARN2">إنذار نهائي فقط 🟠</option>
+              <option value="WARN1">إنذار أولي فقط 🟡</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">بحث بالاسم</label>
+            <input type="text" id="chairSearchInput" oninput="renderChairReport()" placeholder="اكتب اسم الطالب..." class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs" />
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="overflow-x-auto max-h-[550px]">
+          <table class="w-full text-right border-collapse">
+            <thead class="sticky top-0 z-10">
+              <tr class="bg-slate-800 text-white text-xs">
+                <th class="py-3 px-3 text-center w-12">#</th>
+                <th class="py-3 px-4">اسم الطالب الرباعي</th>
+                <th class="py-3 px-3 text-center">المرحلة</th>
+                <th class="py-3 px-3 text-center">الدوام الفعلي</th>
+                <th class="py-3 px-3 text-center">الشعبة</th>
+                <th class="py-3 px-3 text-center">الحضور</th>
+                <th class="py-3 px-3 text-center">الغياب</th>
+                <th class="py-3 px-3 text-center">الإجازات</th>
+                <th class="py-3 px-3 text-center">نسبة الغياب (من <span id="tableMaxLectures">15</span>)</th>
+                <th class="py-3 px-3 text-center">الموقف الأكاديمي</th>
+                <th class="py-3 px-3 text-center no-print">تفاصيل</th>
+              </tr>
+            </thead>
+            <tbody id="chairReportBody" class="divide-y divide-slate-100 text-xs md:text-sm">
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+        <h3 class="text-base font-bold text-slate-800 mb-3">📋 أحدث المحاضرات المسجلة من قبل التدريسيين</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-right border-collapse text-xs md:text-sm">
+            <thead>
+              <tr class="bg-slate-100 text-slate-700 border-b border-slate-200">
+                <th class="py-2.5 px-3">التاريخ</th>
+                <th class="py-2.5 px-3">المادة</th>
+                <th class="py-2.5 px-3">الأستاذ</th>
+                <th class="py-2.5 px-3 text-center">المرحلة / الدوام / الشعبة</th>
+                <th class="py-2.5 px-3 text-center">الحضور / الغياب</th>
+                <th class="py-2.5 px-3 text-center no-print">إجراء</th>
+              </tr>
+            </thead>
+            <tbody id="recentLecturesBody" class="divide-y divide-slate-100">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 3. إدارة البيانات والإعدادات ==================== -->
+    <section id="view-settings" class="hidden space-y-6">
+      <div class="bg-gradient-to-l from-blue-50 to-indigo-50 rounded-2xl shadow-sm border border-blue-200 p-5">
+        <div class="flex flex-wrap items-start justify-between gap-4 mb-3">
+          <div>
+            <h3 class="text-base md:text-lg font-extrabold text-blue-950 flex items-center gap-2">
+              <span>☁️</span> الربط السحابي المركزي (Google Sheets)
+            </h3>
+            <p class="text-xs text-blue-800 mt-1">
+              اربط المنصة بملف Google Sheets لتجميع غيابات جميع الأساتذة لحظياً لدى رئيس القسم، وتحديث ورقة <strong>(تقرير_الحضور_الشامل)</strong> المطابقة لملف الإكسل تلقائياً.
+            </p>
+          </div>
+          <button onclick="openAppsScriptModal()" class="bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 font-bold px-4 py-2 rounded-xl text-xs shadow-sm transition">
+            &lt;/&gt; عرض ونسخ كود Google Apps Script
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+          <div class="md:col-span-6">
+            <label class="block text-xs font-bold text-slate-700 mb-1">رابط تطبيق الويب (Google Apps Script Web App URL)</label>
+            <input type="url" id="cloudUrlInput" dir="ltr" placeholder="https://script.google.com/macros/s/...../exec" class="w-full rounded-xl border border-blue-300 bg-white px-3.5 py-2.5 text-xs font-mono text-left focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+          <div class="md:col-span-2">
+            <button onclick="saveCloudUrl()" class="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-2.5 px-3 rounded-xl text-xs shadow transition">
+              💾 حفظ الرابط
+            </button>
+          </div>
+          <div class="md:col-span-2">
+            <button onclick="initializeCloudSheets()" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs shadow transition">
+              📊 تجهيز ملف Sheets
+            </button>
+          </div>
+          <div class="md:col-span-2">
+            <button onclick="syncFromCloud(true)" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs shadow transition">
+              🔄 مزامنة وجلب
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- استيراد الطلبة من ملف Excel -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3 border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+              <span>📗</span> استيراد الطلبة من ملف Excel (.xlsx / .xls / .csv)
+            </h3>
+            <p class="text-xs text-slate-500 mt-1">
+              إضافة وجبة طلبة جدد أو استبدال القائمة الحالية مباشرة من ملف إكسل ومزامنتها مع السحابة وورقة Google Sheets.
+            </p>
+          </div>
+          <button onclick="downloadExcelTemplate()" class="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-bold px-3.5 py-2 rounded-xl text-xs transition">
+            📥 تحميل قالب Excel نموذجي
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+          <div class="md:col-span-5">
+            <label class="block text-xs font-bold text-slate-600 mb-1">اختر ملف الإكسل (يدعم ملفات القسم متعددة الأوراق)</label>
+            <input type="file" id="excelImportInput" accept=".xlsx,.xls,.csv" class="w-full text-xs text-slate-600 file:ml-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 border border-slate-300 rounded-xl p-1.5 bg-slate-50" />
+          </div>
+          <div class="md:col-span-4">
+            <label class="block text-xs font-bold text-slate-600 mb-1">طريقة الاستيراد</label>
+            <select id="excelImportMode" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-xs font-bold">
+              <option value="append">إضافة الطلبة الجدد إلى القائمة الحالية (دمج)</option>
+              <option value="replace">استبدال قائمة الطلبة بالكامل بالملف الجديد</option>
+            </select>
+          </div>
+          <div class="md:col-span-3">
+            <button onclick="handleExcelImport()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow transition">
+              ⬆️ استيراد ومزامنة الطلبة
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ضبط معادلة الكورس وعتبات الإنذارات والفصل + الحماية -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
+          <h3 class="text-base font-bold text-slate-800 border-b border-slate-100 pb-2">⚖️ ضوابط الكورس ونسب الإنذار والفصل المعتمدة</h3>
+          
+          <div class="bg-blue-50/70 border border-blue-200 rounded-xl p-3">
+            <label class="block text-xs font-extrabold text-blue-900 mb-1">إجمالي عدد محاضرات الكورس للمادة الواحدة (المقام)</label>
+            <div class="flex items-center gap-3">
+              <input type="number" id="courseLecturesInput" value="15" min="1" max="60" class="w-28 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-sm font-extrabold text-center text-blue-900" />
+              <span class="text-xs text-blue-700">محاضرة خلال الكورس (تُحسب النسبة: <code>الغياب ÷ 15 × 100</code>)</span>
+            </div>
+          </div>
+
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+            <div class="text-xs font-extrabold text-slate-800">📘 طلبة المراحل (الأولى، الثانية، الثالثة):</div>
+            <div class="grid grid-cols-3 gap-2">
+              <div>
+                <label class="block text-[11px] font-bold text-amber-700 mb-1">إنذار أولي (%)</label>
+                <input type="number" id="s123Warn1" value="8" step="0.5" min="1" max="100" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-center" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold text-orange-700 mb-1">إنذار نهائي (%)</label>
+                <input type="number" id="s123Warn2" value="10" step="0.5" min="1" max="100" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-center" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold text-rose-700 mb-1">فصل بالغياب (%)</label>
+                <input type="number" id="s123Expel" value="14" step="0.5" min="1" max="100" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-center" />
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+            <div class="text-xs font-extrabold text-slate-800">🎓 طلبة المرحلة الرابعة:</div>
+            <div class="grid grid-cols-3 gap-2">
+              <div>
+                <label class="block text-[11px] font-bold text-amber-700 mb-1">إنذار أولي (%)</label>
+                <input type="number" id="s4Warn1" value="5" step="0.5" min="1" max="100" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-center" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold text-orange-700 mb-1">إنذار نهائي (%)</label>
+                <input type="number" id="s4Warn2" value="10" step="0.5" min="1" max="100" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-center" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold text-rose-700 mb-1">فصل بالغياب (%)</label>
+                <input type="number" id="s4Expel" value="15" step="0.5" min="1" max="100" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-center" />
+              </div>
+            </div>
+          </div>
+
+          <button onclick="saveWarningSettings()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow transition">
+            💾 حفظ ضوابط الكورس ونسب الإنذار وتحديث التقارير
+          </button>
+
+          <div class="pt-3 border-t border-slate-100">
+            <h4 class="text-xs font-extrabold text-slate-700 mb-2 flex items-center gap-1.5">
+              <span>🔐</span> تغيير الرمز السري (PIN) للوحة رئيس القسم
+            </h4>
+            <div class="flex gap-2">
+              <input type="password" id="newAdminPinInput" maxlength="12" placeholder="أدخل الرمز السري الجديد (الافتراضي: 2026)" class="flex-1 rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500" />
+              <button onclick="updateAdminPin()" class="bg-amber-600 hover:bg-amber-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition">
+                تحديث الرمز
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- إضافة طالب جديد -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
+          <h3 class="text-base font-bold text-slate-800 border-b border-slate-100 pb-2">➕ إضافة طالب جديد يدوياً إلى قاعدة البيانات</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="sm:col-span-2">
+              <label class="block text-xs font-bold text-slate-600 mb-1">الاسم الرباعي للطالب</label>
+              <input type="text" id="newStudentName" placeholder="أدخل الاسم الكامل..." class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs" />
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-600 mb-1">المرحلة</label>
+              <select id="newStudentStage" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold">
+                <option value="الأولى">الأولى</option>
+                <option value="الثانية" selected>الثانية</option>
+                <option value="الثالثة">الثالثة</option>
+                <option value="الرابعة">الرابعة</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-600 mb-1">الدوام الفعلي (الدوام مع)</label>
+              <select id="newStudentShift" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold">
+                <option value="صباحي">صباحي</option>
+                <option value="مسائي">مسائي</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-600 mb-1">الشعبة</label>
+              <select id="newStudentSection" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold">
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="C">C</option>
+                <option value="D">D</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-600 mb-1">الجنس</label>
+              <select id="newStudentGender" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold">
+                <option value="ذكر">ذكر</option>
+                <option value="أنثى">أنثى</option>
+              </select>
+            </div>
+          </div>
+          <button onclick="addNewStudent()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow transition">
+            ➕ إضافة الطالب ومزامنته مع السحابة
+          </button>
+
+          <div class="pt-3 border-t border-slate-100">
+            <h4 class="text-xs font-bold text-slate-700 mb-2">💾 النسخ الاحتياطي واستعادة البيانات (JSON)</h4>
+            <div class="flex flex-wrap gap-2">
+              <button onclick="downloadBackupJSON()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold px-3.5 py-2 rounded-xl text-xs transition">
+                ⬇️ تنزيل نسخة احتياطية
+              </button>
+              <label class="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3.5 py-2 rounded-xl text-xs cursor-pointer border border-slate-300 transition">
+                ⬆️ استعادة نسخة
+                <input type="file" accept=".json" onchange="restoreBackupJSON(event)" class="hidden" />
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- إدارة وتعديل بيانات الطلبة ونقلهم بين الشعب -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h3 class="text-base font-bold text-slate-800">⇄ نقل طالب بين الشعب أو الدوام (صباحي/مسائي)</h3>
+          <input type="text" id="manageStudentSearch" oninput="renderManageStudentsTable()" placeholder="ابحث بالاسم لنقل طالب..." class="rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs w-64" />
+        </div>
+        <div class="overflow-x-auto max-h-80">
+          <table class="w-full text-right border-collapse text-xs">
+            <thead>
+              <tr class="bg-slate-100 text-slate-700">
+                <th class="py-2.5 px-3">اسم الطالب</th>
+                <th class="py-2.5 px-3 text-center">المرحلة</th>
+                <th class="py-2.5 px-3 text-center">الدوام الحالي</th>
+                <th class="py-2.5 px-3 text-center">الشعبة</th>
+                <th class="py-2.5 px-3 text-center">تعديل</th>
+              </tr>
+            </thead>
+            <tbody id="manageStudentsBody" class="divide-y divide-slate-100">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- نافذة منبثقة -->
+  <div id="detailModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 id="modalTitle" class="text-base font-extrabold text-slate-800">تفاصيل</h3>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg">✕</button>
+      </div>
+      <div id="modalBody" class="text-sm text-slate-700 max-h-[70vh] overflow-y-auto space-y-3"></div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button onclick="closeModal()" class="bg-slate-800 text-white px-5 py-2 rounded-xl text-xs font-bold">إغلاق</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- إشعار عائم -->
+  <div id="toast" class="fixed bottom-5 left-5 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-xl text-xs md:text-sm font-bold transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-2">
+    <span id="toastIcon">✅</span>
+    <span id="toastMsg">تم الحفظ بنجاح</span>
+  </div>
+
+  <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500 mt-8 no-print">
+    قسم المحاسبة • كلية الإدارة والاقتصاد • العام الدراسي 2026-2027 — منصة الحضور الإلكتروني المتكاملة
+  </footer>
+
+<script>
+// ==================== 1. رابط السحابة الافتراضي المثبّت للجميع ====================
+const DEFAULT_CLOUD_URL = "https://script.google.com/macros/s/AKfycbxYi8rqAQxakTb5tFGIbv9BKJp4tQf4DUuwsJZnaf9RWQG9xZT2MvjluhsdiWcBZ2LN/exec";
+
+// ==================== 2. هيكلية المواد والأساتذة ====================
+const CURRICULUM = [
+  { id: "s4-1", stage: "الرابعة", subject: "مناهج بحث", professors: ["منتصر عمران ناجي", "ثامر ياس خضير"] },
+  { id: "s4-2", stage: "الرابعة", subject: "محاسبة متخصصة", professors: ["أمل محمد سلمان", "أنمار عدنان خضير"] },
+  { id: "s4-3", stage: "الرابعة", subject: "محاسبة ادارية", professors: ["حيدر علي جراد", "حسام محمد علي مهدي"] },
+  { id: "s4-4", stage: "الرابعة", subject: "محاسبة دولية", professors: ["حسين عمران ناجي", "محمد علي جعفر"] },
+  { id: "s4-5", stage: "الرابعة", subject: "كلفة متقدمة", professors: ["صلاح مهدي الكواز", "صادق هادي محي"] },
+  { id: "s4-6", stage: "الرابعة", subject: "معايير تدقيق دولية", professors: ["أزهر صبحي عبد الحسين", "محمد حسين علي", "علي محمد شنان"] },
+
+  { id: "s3-1", stage: "الثالثة", subject: "اساسيات التكاليف", professors: ["محمد وفي عباس", "أحمد ناصر عباس"] },
+  { id: "s3-2", stage: "الثالثة", subject: "محاسبة ضريبة", professors: ["عبد الرسول عبد العباس", "علي محمد حسن محمد جواد"] },
+  { id: "s3-3", stage: "الثالثة", subject: "محاسبة منشات", professors: ["لمياء علي ابراهيم", "ميساء سعد حبي"] },
+  { id: "s3-4", stage: "الثالثة", subject: "نظام محاسبي موحد", professors: ["أحمد نعمة عبد", "حسن عبد الكريم"] },
+  { id: "s3-5", stage: "الثالثة", subject: "محاسبة شركات", professors: ["جاسم عيدان براك", "جنان عبد خاجي"] },
+  { id: "s3-6", stage: "الثالثة", subject: "مناهج بحث", professors: ["حسين عبد علي", "محمد ديوان شنيور", "مرتضى حسن خليف"] },
+  { id: "s3-7", stage: "الثالثة", subject: "تطبيقات محاسبية", professors: ["بشرى جابر محمد جواد"] },
+
+  { id: "s2-1", stage: "الثانية", subject: "محاسبة متوسطة", professors: ["مشتاق طالب عبد الامير", "شهد عودة عبد العباس"] },
+  { id: "s2-2", stage: "الثانية", subject: "محاسبة انكليزي", professors: ["أحمد نجاح هادي", "مؤيد مهدي صالح"] },
+  { id: "s2-3", stage: "الثانية", subject: "محاسبة حكومية", professors: ["محمد جبار فشاخ", "أيمن محمد علي"] },
+  { id: "s2-4", stage: "الثانية", subject: "مبادئ بحوث عمليات", professors: ["علي عبد الحسن"] },
+  { id: "s2-5", stage: "الثانية", subject: "اللغة العربية", professors: ["هالة كريم رضا"] },
+  { id: "s2-6", stage: "الثانية", subject: "المالية العامة", professors: ["ليلى محسن الحكيم", "فرقد محمد بكر"] },
+  { id: "s2-7", stage: "الثانية", subject: "علم الحاسوب", professors: ["فاروق خضير عباس"] }
+];
+
+// ==================== 3. قاعدة بيانات الطلبة الكاملة (666 طالباً) ====================
+const RAW_STUDENTS_GROUPED = {"الثانية|صباحي|A":[["احمد حيدر احمد زكي","ذكر","الصباحية"],["احمد سعد كاظم","ذكر","الصباحية"],["اريج محمد جوده علاوي عوادي","أنثى","الصباحية"],["اسراء ستار عبد الامير ناصر ال خاجي","أنثى","الصباحية"],["الاء علي محسن كاظم","أنثى","الصباحية"],["الاء هادي عبد العباس جبار الشبلاوي","أنثى","الصباحية"],["ايات فلاح عبد الحسن طردي","أنثى","الصباحية"],["أسماء لفنه يحيى","أنثى","الصباحية"],["باقر حاتم مهدي كاطع العارضي","ذكر","الصباحية"],["باقر عبد الامير نجم عبد","ذكر","الصباحية"],["بصائر  حيدر عباس عاشور العرازه","أنثى","الصباحية"],["بنين مرتضى محسن عبود السوداني","أنثى","الصباحية"],["جاسم سالم عبد الامير","ذكر","الصباحية"],["حسين جاسم محمد عبد الحسين العامري","ذكر","الصباحية"],["حيدر علي صعصع عبد الرضا","ذكر","الصباحية"],["رانية محمد عبد الرحيم حسون","أنثى","الصباحية"],["رقية غسان حميد","أنثى","الصباحية"],["رقيه حسين علي فليح العوادي","أنثى","الصباحية"],["زهراء رزاق بشير عذاب الكعبي","أنثى","الصباحية"],["زهراء علاوي حسن علاوي","أنثى","الصباحية"],["زهراء علي يعقوب يوسف الخلف","أنثى","الصباحية"],["زينب حسين كاظم مطرود","أنثى","الصباحية"],["زينب صباح رزاق ال حسون","أنثى","الصباحية"],["زينه جواد كاظم حسون","أنثى","الصباحية"],["سارة حسين عبد الهادي كاظم","أنثى","الصباحية"],["سجاد عطشان منشد عباس","ذكر","الصباحية"],["سجاد عماد كريم مهدي ال ياسر","ذكر","الصباحية"],["سلوان حيدر طه مرزة","ذكر","الصباحية"],["صالح فالح إبراهيم عباس","ذكر","الصباحية"],["طه عباس فضال بندر البوزين الدين","ذكر","الصباحية"],["طيبة عامر فاضل عبدالحسين","أنثى","الصباحية"],["الهام عامر يوسف","أنثى","المسائية"],["امين كمال نوماس طينة البو تفيجة","ذكر","المسائية"],["انتصار جبار عبد زيد عطية","أنثى","المسائية"],["تبارك رضا مشكل حسين","أنثى","المسائية"],["حيدر محمد علي كاطع","ذكر","المسائية"],["رقية علي عباس عبد الامير","أنثى","المسائية"],["زهراء احمد هاشم حسن","أنثى","المسائية"],["زهراء ماهر جابر حسين","أنثى","المسائية"],["زهراء مشتاق طالب ال حسين","أنثى","المسائية"],["زينب حيدر فؤاد علي","أنثى","المسائية"],["طيبة اسيل خضير كاظم كاظم","أنثى","المسائية"]],"الثانية|صباحي|B":[["عباس عادل خليل مهدي","ذكر","الصباحية"],["عذراء خضير ابراهيم عبيد المسعودي","أنثى","الصباحية"],["علاء ميثم عبيد","ذكر","الصباحية"],["علي احمد عبد ناصر اليساري","ذكر","الصباحية"],["علي سعد عبد الشهيد رديف","ذكر","الصباحية"],["علي عبد طربوش محمد","ذكر","الصباحية"],["علي وسام جودة عبد علي العكيلي","ذكر","الصباحية"],["فاطمة نعمه كاظم بريسم","أنثى","الصباحية"],["فاطمه حاتم محمد جابر ال علي","أنثى","الصباحية"],["فاطمه دريد رياض لطيف الصافي","أنثى","الصباحية"],["فاطمه علي حسن ناصر","أنثى","الصباحية"],["فاطمه مكصد عبود جبر","أنثى","الصباحية"],["فراس حميد كاظم مهدي","ذكر","الصباحية"],["فيصل صالح حسين علي الورور","ذكر","الصباحية"],["كرار عدنان كاظم عبد الأمير","ذكر","الصباحية"],["كرار فرح ناصر فاضل","ذكر","الصباحية"],["مجتبى الصادق حسن هادي حسين","ذكر","الصباحية"],["مجتبى عادل مجيد عبد اليمة ال هذال","ذكر","الصباحية"],["محمد اياد ريال جزاع الكريطي","ذكر","الصباحية"],["محمد اياد كاظم","ذكر","الصباحية"],["محمد سلمان شنيف جاسم","ذكر","الصباحية"],["محمد عباس فاضل عوده","ذكر","الصباحية"],["مريم علي عبد الصمد حاجم","أنثى","الصباحية"],["مريم نبيل بدوي نايل","أنثى","الصباحية"],["مصطفى منذر خليل","ذكر","الصباحية"],["مقتدى جبار عبد الامير محيسن","ذكر","الصباحية"],["موسى جعفر عبد الزهرة عليوي","ذكر","الصباحية"],["مؤيد عبد الله حسين منديل","ذكر","الصباحية"],["ندى فاروق حسن هادي","أنثى","الصباحية"],["نرجس عبد الحسين لفته هادي","أنثى","الصباحية"],["نغم حمزه فاضل حسين ال فدعم","ذكر","الصباحية"],["هبة اياد عبد الله الزيدي","أنثى","الصباحية"],["هديل علي حسين","أنثى","الصباحية"],["وجدان صالح علي حاجي","أنثى","الصباحية"],["يوسف حيدر جبر عليوي الموسوي","ذكر","الصباحية"],["صادق تكليف امير","ذكر","المسائية"],["عباس فاضل شهيد منديل","ذكر","المسائية"],["غدير محمد جواد عبد الامير","أنثى","المسائية"],["مريم محمد موحان كاطع","أنثى","المسائية"],["مصطفى توفيق عبد العباس","ذكر","المسائية"],["منتظر محمد علي حسين","ذكر","المسائية"],["نور الهدى سلمان عبد مشي","أنثى","المسائية"],["هدى فاضل محمد علي","أنثى","المسائية"]],"الثانية|مسائي|A":[["احمد ابراهيم ياسر كروش","ذكر","المسائية"],["احمد حسن جبار كريم","ذكر","المسائية"],["احمد هاشم هادي دحلوس","ذكر","المسائية"],["استبرق عدنان كريم عبيد","أنثى","المسائية"],["اسراء محمد زيدان ظاهر","أنثى","المسائية"],["افراح عدنان درجال حسين","أنثى","المسائية"],["اكرم ايهاب كاظم عبد علي","ذكر","المسائية"],["امير احمد عبد عناد","ذكر","المسائية"],["باقر حسنين محمد طه حسين","ذكر","المسائية"],["بنين احمد سلمان امين","أنثى","المسائية"],["بنين عيسى حسن حسين","أنثى","المسائية"],["بيداء جابر عبود شعلان","أنثى","المسائية"],["تبارك حيدر علي هلال","أنثى","المسائية"],["جاسم محمد كزارمحمد","ذكر","المسائية"],["جعفر حيدر جواد كريم","ذكر","المسائية"],["حسام عايد شايل الزكروطي","ذكر","المسائية"],["حسين جمال حمود","ذكر","المسائية"],["حسين عبد عون محسن فهد الحسين","ذكر","المسائية"],["حسين عبدالكاظم حمد مشاري","ذكر","المسائية"],["حسين علي ابراهيم سلطان","ذكر","المسائية"],["حسين نصير سامي","ذكر","المسائية"],["حسين هيثم صباح عبد الامير","ذكر","المسائية"],["حسين هيثم غافل هلال","ذكر","المسائية"],["حنان مهدي اسماعيل","أنثى","المسائية"],["حيدر جاسب محي ذرب","ذكر","المسائية"],["رباب سجاد محمد صالح","أنثى","المسائية"],["رباب عباس حمد عبيد","أنثى","المسائية"],["رسل عباس علي زعلان","أنثى","المسائية"],["رقية محمد لايذ عبود","أنثى","المسائية"],["رؤيا صالح شعلان كاظم","أنثى","المسائية"],["زهراء اياد شاكر جهاد","أنثى","المسائية"],["زهراء حسام سالم جابر","أنثى","المسائية"],["زهراء عباس عبد الزهرة عطية","أنثى","المسائية"],["زهير سعد راشد محيميد","ذكر","المسائية"]],"الثانية|مسائي|B":[["زينب معن حميد داغر","أنثى","المسائية"],["ساجد حسين كاظم علوان","ذكر","المسائية"],["سارة كاظم جواد كاظم","أنثى","المسائية"],["سجاد زاهر كاظم","ذكر","المسائية"],["سجاد هيثم شريف حربي","ذكر","المسائية"],["سما عبد الاله كاظم جواد","أنثى","المسائية"],["سهيله كريم عبيد","أنثى","المسائية"],["شيماء نعمه هاشم هواد","أنثى","المسائية"],["ضياء خليل عباس حمود الطائي","ذكر","المسائية"],["طارق علي عبد الامير","ذكر","المسائية"],["عباس نعيم كريم حبيب","ذكر","المسائية"],["عبير عبد الامير حميد","أنثى","المسائية"],["علي باهر فاخر عبدالكريم","ذكر","المسائية"],["علي ستار عبد الامير عبد الواحد","ذكر","المسائية"],["علي سلمان  صالح سليمان","ذكر","المسائية"],["علي عدي جميل جاسم","ذكر","المسائية"],["علي مصلح يوسف مهدي","ذكر","المسائية"],["غسق كريم حسن علي","أنثى","المسائية"],["فيصل حسن علي التميمي","ذكر","المسائية"],["قاسم راشد شهاب احمد الصكر","ذكر","المسائية"],["كاظم عباس حسن","ذكر","المسائية"],["كامل ستار كامل عجوب","ذكر","المسائية"],["محمد ستار جبار فهد","ذكر","المسائية"],["محمد سمير احمد عبود","ذكر","المسائية"],["محمد علي حسين علي","ذكر","المسائية"],["محمد مازن عبد الحسن جبر","ذكر","المسائية"],["مقتدى خليل ابراهيم","ذكر","المسائية"],["منتظر حاكم حسين عجيل","ذكر","المسائية"],["منتظر صاحب رحمن محمد","ذكر","المسائية"],["مهدي ضياء محمد عبد النبي","ذكر","المسائية"],["نبأ ثامر راضي جواد","أنثى","المسائية"],["نبأ حسين كريم جاسم","أنثى","المسائية"],["ندى نوري كاظم حمادي","أنثى","المسائية"],["نور الهدى سامي بري عبد","أنثى","المسائية"],["نور علاء صبيح عبد الحمزة","أنثى","المسائية"],["نور غسان عيسى عمران","أنثى","المسائية"],["هدى حسين عطية رحيم","أنثى","المسائية"],["ياسر جابر محمد جريان","ذكر","المسائية"]],"الثالثة|صباحي|A":[["احمد عدنان هاشم ظاهر","ذكر","الصباحية"],["اساور محمد حواس نادر","أنثى","الصباحية"],["امال سليم مجيد جابر","أنثى","الصباحية"],["امير ابراهيم عبدالعباس","ذكر","الصباحية"],["امير سعيد جبار عبد","ذكر","الصباحية"],["امير سلام عبد الرضا سعد","ذكر","الصباحية"],["امير لؤي عبد الامير","ذكر","الصباحية"],["ايات احسان علي عبيد","أنثى","الصباحية"],["ايات فاخر سلمان","أنثى","الصباحية"],["ايه عبد الحسين عبد عون هادي","أنثى","الصباحية"],["آيات خالد مراد ماضي","أنثى","الصباحية"],["تبارك حسين جبار حمزة","أنثى","الصباحية"],["تبارك يعقوب يوسف هاشم","أنثى","الصباحية"],["ثرى قاسم طعمه عذيب","أنثى","الصباحية"],["حامد احمد محمد شمس الدين","ذكر","الصباحية"],["حذيفة علي زغير ستات ستات","ذكر","الصباحية"],["حسن حيدر جبار ياسين كمونه","ذكر","الصباحية"],["حسن طارق علوان حسن التميمي","ذكر","الصباحية"],["حسن علي محمد تقي محمد","ذكر","الصباحية"],["حسن غسان كشكول مهدي النفحاوي","ذكر","الصباحية"],["حسنين شعلان محمود صالح","ذكر","الصباحية"],["حسنين صبار فهد حسن","ذكر","الصباحية"],["حسين محمد سعدي رشيد","ذكر","الصباحية"],["حسين ناجح جلاب عبد","ذكر","الصباحية"],["حنين قاسم محمد جاسم","أنثى","الصباحية"],["حنين كاظم محمد علي","أنثى","الصباحية"],["حنين مهند جميل ناصر","أنثى","الصباحية"],["حيدر حسين حسون عبود","ذكر","الصباحية"],["حيدر فارس جواد كاظم","ذكر","الصباحية"],["حيدر محي حسين محي","ذكر","الصباحية"],["حيدر ياس خضير عباس","ذكر","الصباحية"],["رقية جواد حسن رحيم","أنثى","الصباحية"],["رواء نصير عبد السلام العبيدي","أنثى","الصباحية"],["ايات جعفر حسن هاشم","أنثى","المسائية"],["تبارك جابر كاظم عبد علي","أنثى","المسائية"],["تبارك حامد لطيف فرج","أنثى","المسائية"],["تبارك عقيل حسن بربش الشمري","أنثى","المسائية"],["حسين حمود ابيتر عجيمي","ذكر","المسائية"],["حسين صبري ناصر حسين","ذكر","المسائية"],["حوراء فريد وحيد جاسم","أنثى","المسائية"],["رسل صلاح هادي موسى البطاط","أنثى","المسائية"],["رضا حيدر مكاوي كاظم الاسدي","ذكر","المسائية"]],"الثالثة|صباحي|B":[["حسين علاء هادي عبد","ذكر","الصباحية"],["رقية كريم حمود","أنثى","الصباحية"],["رقية نزار كاظم حسين","أنثى","الصباحية"],["زهراء حسام عبد الامير محمد علي","أنثى","الصباحية"],["زهراء رحيم شريف حسين","أنثى","الصباحية"],["زهراء رسول نعمة مهدي","أنثى","الصباحية"],["زهراء علي عبد الزهرة برباز","أنثى","الصباحية"],["زهراء محمد سلمان خزعل","أنثى","الصباحية"],["زهراء محمد عبد عبد النبي","أنثى","الصباحية"],["زهراء محمد فتاح محمد","أنثى","الصباحية"],["زيد نزار عبد الرضا محمد","ذكر","الصباحية"],["زينب احمد حسين صالح","أنثى","الصباحية"],["زينب حيدر جاسم محمد","أنثى","الصباحية"],["زينب صادق حسين عبد عون","أنثى","الصباحية"],["زينب كريم هادي تويه","أنثى","الصباحية"],["سجى ضياء صالح حنون","أنثى","الصباحية"],["سيف سعد حسين عبيد","ذكر","الصباحية"],["صادق احمد زبيل راضي","ذكر","الصباحية"],["صادق حيدر هاني علي","ذكر","الصباحية"],["صلاح قصي مهدي حسون","ذكر","الصباحية"],["عباس صدام جاهل عبد","ذكر","الصباحية"],["عبد الرحمن عادل جاسم ناصر","ذكر","الصباحية"],["عزام عزيز صباح صكر","ذكر","الصباحية"],["علي حسن طارق","ذكر","الصباحية"],["علي حسين رضا شنيو","ذكر","الصباحية"],["علي حسين عبدعلي شعلان","ذكر","الصباحية"],["علي حيدر سرحان جهيد","ذكر","الصباحية"],["علي رشيد عبد زيد شلاش","ذكر","الصباحية"],["علي رضا حسين عمران ناجي","ذكر","الصباحية"],["علي كاظم جواد عودة","ذكر","الصباحية"],["علي كاظم عبد الحسين منفي","ذكر","الصباحية"],["فاتن موفق عبد الحسين هادي","أنثى","الصباحية"],["فاطمة الزهراء مؤيد لطيف","أنثى","الصباحية"],["فاطمة واثق يوسف حمد","أنثى","الصباحية"],["فاطمه رسول تحسين محمد","أنثى","الصباحية"],["محمد رحيم عبيد جلوب","ذكر","الصباحية"],["عبدالامير محمد عبدالامير","ذكر","المسائية"],["علي عبد الكريم قاسم محمد","ذكر","المسائية"],["علي محمد عبد علي جاسم","ذكر","المسائية"],["فاطمة صفاء نعمة جلاب","أنثى","المسائية"]],"الثالثة|صباحي|C":[["علي وليد عباس محمد","ذكر","الصباحية"],["كوثر منتظر قاسم محمد","أنثى","الصباحية"],["لمياء علي عويد والي","أنثى","الصباحية"],["ليث عماد لفتة عباس","ذكر","الصباحية"],["محمد باقر محمد عبدالحسن","ذكر","الصباحية"],["محمد حسين تكليف حمزة","ذكر","الصباحية"],["محمد عباس مايع قاسم","ذكر","الصباحية"],["محمد علي حسن غازي","ذكر","الصباحية"],["مريم احمد عبد عون خنياب","أنثى","الصباحية"],["مريم اياد يونس حسن","أنثى","الصباحية"],["مريم تركي طنيش","أنثى","الصباحية"],["مريم ضياء الدين سامي محمد حسن","أنثى","الصباحية"],["منتظر احمد عبد الحسن علي","ذكر","الصباحية"],["منتظر صلاح هادي موسى","ذكر","الصباحية"],["مهند محمود سلمان جاسم","ذكر","الصباحية"],["نبأ محمد كريم داود","أنثى","الصباحية"],["نهروان عباس عبد العظيم عبد الامير","أنثى","الصباحية"],["نور الهدى صدام عبيس عبد","أنثى","الصباحية"],["هبة الله علي عبد الرحيم مبارك","أنثى","الصباحية"],["هبة سالم خضير عبد","أنثى","الصباحية"],["هجران كاظم غلاب مرهج","أنثى","الصباحية"],["ورود جهاد ستار جاسم","أنثى","الصباحية"],["ياسمين سلمان عاشور شعلان","أنثى","الصباحية"],["كوثر سلام عباده عطيه","أنثى","المسائية"],["محمد احمد جاسم ناصر","ذكر","المسائية"],["محمد رضا جمعه حسين العلي","ذكر","المسائية"],["محمد سعد عبد الله عطشان","ذكر","المسائية"],["محمد غسان محمد علي الطرفي","ذكر","المسائية"],["مريم محمد شليف عبد هذال اليساري","أنثى","المسائية"],["ملاك عبدالستار عامر مكطوف","أنثى","المسائية"],["منتظر فاضل خضير عجرش","ذكر","المسائية"],["نور الهدى عامر عواد مطلك","أنثى","المسائية"]],"الثالثة|صباحي|D":[["كرار حيدر عباس رشيد","ذكر","الصباحية"],["مصطفى احمد ناصر كشكول","ذكر","الصباحية"],["مصطفى ناصر فالح حسن","ذكر","الصباحية"],["موسى حسن موسى دخيل الاسدي","ذكر","الصباحية"]],"الثالثة|مسائي|C":[["لارا فاهم نذير بيري","أنثى","الصباحية"],["فاطمه عباس زغير عباس","أنثى","المسائية"],["فاطمه فاضل علي اكبر حسين","أنثى","المسائية"],["فاطمه محمد جاسم لفته","أنثى","المسائية"],["فرقد حسن شواي حسن","ذكر","المسائية"],["كوثر كريم علي حسين","أنثى","المسائية"],["لمياء رشيد نعوم محمد","أنثى","المسائية"],["لؤي محمد صبر ناصر السيلاوي","ذكر","المسائية"],["ليث عمران موسى علوان","ذكر","المسائية"],["مآرب جاسم محمد علي جعفر","أنثى","المسائية"],["مثال وعد عبدعلي عبد الامير","ذكر","المسائية"],["مجتبى اسعد عثمان خضير","ذكر","المسائية"],["مجتبى قيس مطشر شندل","ذكر","المسائية"],["مجتبى محمود عباس حسون","ذكر","المسائية"],["محمد حاتم مهدي صالح","ذكر","المسائية"],["محمد زكي تكليف كاظم الكاظم","ذكر","المسائية"],["محمد قاسم عبد الرضا حمود","ذكر","المسائية"],["محمد ياسين سوادي سلطان","ذكر","المسائية"],["مرتضى دوهان شدهان حسون","ذكر","المسائية"],["مريم صبيح طوير عبد الابراهيمي","أنثى","المسائية"],["مريم طالب جبر دنان","أنثى","المسائية"],["مريم عقيل خضير نايف","أنثى","المسائية"],["مصطفى حسن كاظم محمد","ذكر","المسائية"],["مصطفى عبد حسن علي","ذكر","المسائية"],["مصطفى محمد فليح سبيسة","ذكر","المسائية"],["منتظر سليم كاظم ابراهيم","ذكر","المسائية"],["مهدي حيدر عبد الامير علي","ذكر","المسائية"],["مهدي علاوي عبد الزهرة محمد","ذكر","المسائية"],["مهيمن فاضل عبدالامير","ذكر","المسائية"],["نرجس يحيى عطيه عبد الرحيم الناصري","أنثى","المسائية"],["هادي احمد صاحب هادي","ذكر","المسائية"],["هبه حيدر محمد عبيس","أنثى","المسائية"],["وفاء حسين محمد باقر الكلابي","أنثى","المسائية"]],"الثالثة|مسائي|A":[["احمد حسام خضير عباس","ذكر","المسائية"],["احمد عباس ناصر حسين","ذكر","المسائية"],["احمد علي حليم عباس","ذكر","المسائية"],["امير حسن علي جهاد","ذكر","المسائية"],["امير رحمن صكبان حسون","ذكر","المسائية"],["امير علي موحان ياسر","ذكر","المسائية"],["انور جاسم جياد محمد","ذكر","المسائية"],["بكر كريم حسين سطاي","ذكر","المسائية"],["بنين اسعد علي محمد الجبوري","أنثى","المسائية"],["بنين حسن عبيد محسن","أنثى","المسائية"],["بنين عناد وحيد حسن","أنثى","المسائية"],["تبارك عواد جوده كاظم","أنثى","المسائية"],["جعفر ثامر جعفر عبدالصمد","ذكر","المسائية"],["حسن فلاح خليل مراد","ذكر","المسائية"],["حسن كاظم محمد رويحي","ذكر","المسائية"],["حسن محمد جبر حمد","ذكر","المسائية"],["حسن هيثم غافل هلال","ذكر","المسائية"],["حسين اياد عيدان جواد","ذكر","المسائية"],["حسين سعيد ابراهيم جاسم","ذكر","المسائية"],["حسين عامر علوان جبر","ذكر","المسائية"],["حسين عباس خضير جبر الفتلاوي","ذكر","المسائية"],["حسين علي قائد عبيد الخيكاني","ذكر","المسائية"],["حسين محمد رزاق عبد الامير","ذكر","المسائية"],["حكيمة كاظم عباس محسن","أنثى","المسائية"],["حنان علي جابر محمد الكعبي","أنثى","المسائية"],["حوراء رعد سعد حبيب","أنثى","المسائية"],["حيدر جبار عليوي مخيف ال مخيلف","ذكر","المسائية"],["حيدر عباس رزاق عباس","ذكر","المسائية"],["حيدر علاء سهيل كريم","ذكر","المسائية"],["داليا فلاح جبار سلمان","أنثى","المسائية"],["رانيا رائد احمد خلف","أنثى","المسائية"],["رداد حاتم طارق صاحب","أنثى","المسائية"],["رضا سعدون عبد المهدي حمادي","ذكر","المسائية"],["زهراء كريم عداي مصحب","أنثى","المسائية"]],"الثالثة|مسائي|B":[["رقية سمير نجم عبد","أنثى","المسائية"],["رقية لؤي محمد حسين","أنثى","المسائية"],["رقيه نجم عبد الله جويد","أنثى","المسائية"],["زهراء احمد علي راضي","أنثى","المسائية"],["زهراء باقر هاشم جاسم","أنثى","المسائية"],["زهراء حميد ابو حسين","أنثى","المسائية"],["زهراء راتب شوكت عبيد الزيادي","أنثى","المسائية"],["زهراء عدي جمعه مهنه الحريشاوي","أنثى","المسائية"],["زهراء علي عبد الهادي عذافة الميالي","أنثى","المسائية"],["زينب بسام داود سلمان","أنثى","المسائية"],["زينب حسين مؤيد عبد الحسين","أنثى","المسائية"],["زينب علاء عباده عطيه","أنثى","المسائية"],["سامر نزار عبد خشان","ذكر","المسائية"],["سيف خضير عباس عبد الكاظم","ذكر","المسائية"],["شهد ياس خضر جعفر الساعدي","أنثى","المسائية"],["صفا خيري علي اكبر علي عسكر","أنثى","المسائية"],["طيبه حليم علي هادي","أنثى","المسائية"],["طيف قحطان عداي عمران","أنثى","المسائية"],["عادل جبر كاظم كزار","ذكر","المسائية"],["عباس جبار عباس صياح","ذكر","المسائية"],["عباس حيدر صاحب علي الانباري","ذكر","المسائية"],["عباس لطيف ميس منخي","ذكر","المسائية"],["عبد الله عاشور عبد الامير عبد الرضا","ذكر","المسائية"],["عبد الله عباس عليوي عباس","ذكر","المسائية"],["عقيل حكمت باره جماح","ذكر","المسائية"],["علا احمد علي عبيس","أنثى","المسائية"],["علي اكبر علي حبيب محمد","ذكر","المسائية"],["علي باسم حسين شياع","ذكر","المسائية"],["علي جليل عطية حمود","ذكر","المسائية"],["علي حسين مرتضى حاوي","ذكر","المسائية"],["علي حيدر صاحب مهدي","ذكر","المسائية"],["علي سعدي عبدالرزاق علي","ذكر","المسائية"],["علي صبار ناظم متعب","ذكر","المسائية"],["علي طاهر عبد الحسين خشان","ذكر","المسائية"],["علي كرار عبد الرضا كريم الزجراوي","ذكر","المسائية"],["علي مقداد علي مخيف","ذكر","المسائية"],["غدير عباس خضير محيل الشيباني","أنثى","المسائية"],["كوثر عبد الحسين محمد حسن","أنثى","المسائية"]],"الرابعة|صباحي|A":[["ابراهيم سيف الدين ابراهيم خلف التميمي","ذكر","الصباحية"],["اثمار حيدر محسن جواد","أنثى","الصباحية"],["احمد خضير عبد صخي","ذكر","الصباحية"],["احمد سعد حسين جوده","ذكر","الصباحية"],["احمد صباح عبد الحسن هاشم","ذكر","الصباحية"],["احمد عباس حسين اسماعيل","ذكر","الصباحية"],["احمد علي عبد العظيم عيسى","ذكر","الصباحية"],["اديان احمد حواس هادي","أنثى","الصباحية"],["اسراء خضير عباس حبيب","أنثى","الصباحية"],["اسراء فاضل عبد الله علي","أنثى","الصباحية"],["الاء علي نوري حسب","أنثى","الصباحية"],["امنة حامد جاسم محمد","أنثى","الصباحية"],["امير ستار صالح مهدي","ذكر","الصباحية"],["امير شاكر مسفار تركي","ذكر","الصباحية"],["امير صادق عبدالكاظم العامري","ذكر","الصباحية"],["امير عباس درويش حبيب","ذكر","الصباحية"],["امير قحطان عذاب حسين","ذكر","الصباحية"],["امير لؤي عبد عباس","ذكر","الصباحية"],["ايات صبيح صباح عبيد","أنثى","الصباحية"],["ايات فاضل سلمان عبد الله","أنثى","الصباحية"],["ايات كاظم موسى عبد الحسين","أنثى","الصباحية"],["ايات كاظم موسى مهدي","أنثى","الصباحية"],["ايمن ابراهيم عليوي","ذكر","الصباحية"],["ايمن علي ناعور","ذكر","الصباحية"],["ايه رحمن عبيد ياسر","أنثى","الصباحية"],["آيات سلمان حسن علي","أنثى","الصباحية"],["بتول حازم حمود هاني","أنثى","الصباحية"],["بسملة ماجد جليل محمد","أنثى","الصباحية"],["بشرى صادق هادي جاسم اليساري","أنثى","الصباحية"],["بنين حامد رشيد حسن مهدي","أنثى","الصباحية"],["بنين حسن هادي صحن","أنثى","الصباحية"],["بنين خميس حسين حسن غروي","أنثى","الصباحية"],["بنين علي ناجي عباس","أنثى","الصباحية"],["بنين مهدي طارش ناصر حسين","أنثى","الصباحية"],["بنين مهدي نعمة علوان","أنثى","الصباحية"],["تبارك حسين ناصر ديوان","ذكر","الصباحية"],["تبارك عباس جواد كاظم الشاوي","أنثى","الصباحية"],["تبارك ناظم خضير مكي","أنثى","الصباحية"],["تبارك نجم عبد الرضا","أنثى","الصباحية"],["تقى احمد جاسم محمد","أنثى","الصباحية"],["تقى عثمان نجم عبد","أنثى","الصباحية"],["تمار ميثم سالم راضي الجبوري","ذكر","الصباحية"],["ثامر فاضل سعود عاشور","ذكر","الصباحية"],["جعفر لؤي جاسم محمد السعدي","ذكر","الصباحية"],["حسن عبد الامير محمد","ذكر","الصباحية"],["حسن علوان مالك","ذكر","الصباحية"],["حسنين رياض عيدان عبد الجليل","ذكر","الصباحية"],["حسين احمد يوسف مهدي","ذكر","الصباحية"],["حسين علي سلوم حسن","ذكر","الصباحية"],["حسين هاشم عريبي فاضل","ذكر","الصباحية"],["حنين جميل كامل سرحان","أنثى","الصباحية"],["حوراء حيدر محمد","أنثى","الصباحية"],["حيدر عبد الله جاسم محمد الجعفر","ذكر","الصباحية"],["عبد الرحمن رزاق جابر صالح","ذكر","الصباحية"],["ابرار علي ميري حميدي","أنثى","المسائية"],["امنة ماجد حميد عبود","أنثى","المسائية"],["جواد سلمان جواد مطيري","ذكر","المسائية"],["حسن حامد عبيس راهي","ذكر","المسائية"],["حسين اسعد عبيد جبار","ذكر","المسائية"],["رباب كاظم جاسم سلمان","أنثى","المسائية"],["رضا حسين عبد الهادي عبد الزهرة","ذكر","المسائية"],["رفل جاسم خضير عجرش","أنثى","المسائية"]],"الرابعة|صباحي|B":[["حسين جاسم سوير عبادي","ذكر","الصباحية"],["حسين علاء هادي كريم","ذكر","الصباحية"],["حسين علي جبر حسن","ذكر","الصباحية"],["حسين علي خضير عاشور","ذكر","الصباحية"],["حسين علي كدر زبالة","ذكر","الصباحية"],["حسين علي منصور محسن","ذكر","الصباحية"],["حسين محمد جدوع محسن","ذكر","الصباحية"],["حسين محمد عويف محمد حسيناوي","ذكر","الصباحية"],["حنين كاظم عبيد","أنثى","الصباحية"],["حوراء عبدعلي خشان مشلوخ الجحيشي","أنثى","الصباحية"],["حوراء كاظم جاسم محمد عباس","أنثى","الصباحية"],["حيدر سعيد عباس","ذكر","الصباحية"],["حيدر محمد معيوف حسين","ذكر","الصباحية"],["دعاء عادل مجبل نعمة","أنثى","الصباحية"],["دعاء فيصل هادي ناهي","أنثى","الصباحية"],["ذكرى علي ابراهيم علي","أنثى","الصباحية"],["رسل باسم محمد فياض","أنثى","الصباحية"],["رضا محمد حاتم صيهود","ذكر","الصباحية"],["رقية عامر كريم عامر","أنثى","الصباحية"],["رؤى حميد سلطان غند","أنثى","الصباحية"],["ريام غازي مرمش جاسم الجنابي","أنثى","الصباحية"],["زهراء ضرغام رحيم لفته","أنثى","الصباحية"],["زهراء فاضل جويعد حسن نويصري","أنثى","الصباحية"],["زهراء مصطفى محمد صالح مجيد","أنثى","الصباحية"],["زهراء ميثم كاظم محمد الجبوري","أنثى","الصباحية"],["زيد علاء عبد الامير راضي","ذكر","الصباحية"],["زين العابدين حسين سلمان جاسم","ذكر","الصباحية"],["زينب برير صاحب مهدي سلمان","أنثى","الصباحية"],["زينب رحيم قاسم حسن مطر","أنثى","الصباحية"],["زينب سلام عبد حميد","أنثى","الصباحية"],["زينب عبد الحسين مجيد حسين","أنثى","الصباحية"],["زينه عادل بدر علوان","أنثى","الصباحية"],["سامي صادق فرحان طنيان","ذكر","الصباحية"],["ستار شاكر عباس محمد","ذكر","الصباحية"],["علي محمد رضا","ذكر","الصباحية"],["محمد مهدي شكور عبد المطلب عرمش","ذكر","الصباحية"],["مصطفى مهدي كريم شمران","ذكر","الصباحية"],["زهراء محمد ياسر ناصر","أنثى","المسائية"],["سجاد احمد خضير عباس","ذكر","المسائية"],["عبد الرضا عايد عبيد حسن","ذكر","المسائية"],["فاطمة عباس مزهر سكر","أنثى","المسائية"],["فاطمه هشام علي مجلي","أنثى","المسائية"],["كوثر نعمة نوري عنبر","أنثى","المسائية"]],"الرابعة|صباحي|C":[["سجاد بدري ساجت سلمان","ذكر","الصباحية"],["سجاد جاسم محمد مسلم","ذكر","الصباحية"],["سجاد حيدر صبار جاسم ال بورضي","ذكر","الصباحية"],["سجاد رعد علي محمد","ذكر","الصباحية"],["سجى باسم طعيمه وادي الجابري","أنثى","الصباحية"],["سجى صالح نادر عبيد الخفاجي","أنثى","الصباحية"],["سدران قحطان موسى جعفر","ذكر","الصباحية"],["سراج الدين هاشم محمد جاسم","ذكر","الصباحية"],["سرى قاسم سلمان موسى","أنثى","الصباحية"],["سكينة صافي شلش ثجيل","أنثى","الصباحية"],["سكينه مصعب موسى ابو حسين","أنثى","الصباحية"],["سهى محسن محي جبر","أنثى","الصباحية"],["شهد عادل عبد الزهرة","أنثى","الصباحية"],["صابرين حاكم نجم حسين العارضي","أنثى","الصباحية"],["صفا حسين شاكر محمد","أنثى","الصباحية"],["صفاء ليث كاظم جمعه نوري الاسدي","ذكر","الصباحية"],["ضحى سامي كامل عبود","أنثى","الصباحية"],["طيبة اكرم عزيز كاظم","أنثى","الصباحية"],["طيبة عزيز منصور جبر الطائي","أنثى","الصباحية"],["عامر حامد مشهد مسربت","ذكر","الصباحية"],["عباس حازم رسول عبد","ذكر","الصباحية"],["عباس عدنان جاسم ابراهيم","ذكر","الصباحية"],["عباس ماهر محمد زيدان","ذكر","الصباحية"],["عبد الله محمد حسين عبد الله","ذكر","الصباحية"],["عبد الله نجاح حسين عجيل","ذكر","الصباحية"],["عبدالله عماد احمد كاظم الجنابي","ذكر","الصباحية"],["عذراء صائب جياد امين","أنثى","الصباحية"],["عذراء عامر حسين علي","أنثى","الصباحية"],["علاء سالم داخل جبر","ذكر","الصباحية"],["علي حسين عبد الله حسين","ذكر","الصباحية"],["علي شهاب احمد خضير","ذكر","الصباحية"],["علي عبيس مروح حسن","ذكر","الصباحية"],["علي علاء صاحب علاوي","ذكر","الصباحية"],["علي كامل خضير محسن المسعودي","ذكر","الصباحية"],["علي مهدي مزهر عزبة","ذكر","الصباحية"],["عمر ياسين خضير حمزة","ذكر","الصباحية"],["فاطمة طه عبد الحسن حبيب","أنثى","الصباحية"],["فاطمة علي حسين فليفل الزغيبي","أنثى","الصباحية"],["فاطمة علي طه كاظم","أنثى","الصباحية"],["فاطمة ضياء محي محسن","أنثى","المسائية"],["محمد سالم جواد كاظم","ذكر","المسائية"],["محمد كاظم عبد جبار","ذكر","المسائية"],["مرتضى طعمة عبد الواحد اسماعيل","ذكر","المسائية"],["مريم اياد عباس ساجت","أنثى","المسائية"],["نورهان سليم محسن حسون","أنثى","المسائية"],["هبة علي سعيد جاسم","أنثى","المسائية"]],"الرابعة|صباحي|D":[["فاطمة عماد جاسم عاشور","أنثى","الصباحية"],["فاطمه الزهراء عدنان خزعل الحسين","أنثى","الصباحية"],["فاطمه رائد ناصر","أنثى","الصباحية"],["فاطمه محمد تكليف حمزة","أنثى","الصباحية"],["فهد احمد عبود فهد","ذكر","الصباحية"],["قاسم محمد زكي ابراهيم محمد","ذكر","الصباحية"],["قمر ابراهيم حسين","أنثى","الصباحية"],["كاظم جواد كاظم يدام","ذكر","الصباحية"],["كرار سلام عزيز حمود","ذكر","الصباحية"],["ليث ناصر حسين","ذكر","الصباحية"],["ليلى صفاء جاسم جودة","أنثى","الصباحية"],["مجتبى جواد كاظم حسن","ذكر","الصباحية"],["مجتبى مهدي عباس مهدي","ذكر","الصباحية"],["محمد ضياء كاظم مهدي","ذكر","الصباحية"],["محمد علي حمود حسين","ذكر","الصباحية"],["محمد مهدي عبدزيد عبود الحسناوي","ذكر","الصباحية"],["محمود احمد مراد حسناوي","ذكر","الصباحية"],["مرتضى حسن محمد علي عويز","ذكر","الصباحية"],["مرتضى علاء امطير طراد","ذكر","الصباحية"],["مرتضى ناظم دريول عبد","ذكر","الصباحية"],["مريم مكي مهدي حمود","أنثى","الصباحية"],["مصطفى محمد عامر كاظم الحيثاني","ذكر","الصباحية"],["مقتدى علي حسون بادي جيثاني","ذكر","الصباحية"],["منتظر احمد عبد الرضا كزار","ذكر","الصباحية"],["منصور سطام يوسف مجلي","ذكر","الصباحية"],["مؤمل علي مجهول كمر","ذكر","الصباحية"],["مؤيد رعد جبار سعيد","ذكر","الصباحية"],["نبأ نجم عبد الله عبادي","أنثى","الصباحية"],["نور الهدى عباس عمران حسن","أنثى","الصباحية"],["نور كريم خزعل عبيد","أنثى","الصباحية"],["هاجر سعد عبد الزهرة عبد الحسين","أنثى","الصباحية"],["هبة حازم حسن عبد الخضر الطائي","أنثى","الصباحية"],["ورود طلال علي","أنثى","الصباحية"],["يقين صباح جبر زغير","أنثى","الصباحية"],["يوسف رياض صبيح مزهر","ذكر","الصباحية"],["يوسف رياض كاظم مطشر","ذكر","الصباحية"]],"الرابعة|مسائي|A":[["حسن هشام سفاح","ذكر","الصباحية"],["ابراهيم حسين علي","ذكر","المسائية"],["ابراهيم علي محي فاضل","ذكر","المسائية"],["ارشد امتحان محمد ناصر","ذكر","المسائية"],["ام البنين خالد احمد شهاب","أنثى","المسائية"],["امتنان فراس عباس حميدي","أنثى","المسائية"],["امير ناصر حسين حسن","ذكر","المسائية"],["ايات منذر نعمه ناجي","أنثى","المسائية"],["ايلاف حسن محمد علي","أنثى","المسائية"],["أيسر هيثم حسن حمزه","ذكر","المسائية"],["بنين حامد مهدي رشيد","أنثى","المسائية"],["تبارك حسن محمد حسين","أنثى","المسائية"],["تحسين خير الله شهيد","ذكر","المسائية"],["جاسم محمد كاظم فنر","ذكر","المسائية"],["جاسم محمد هارون عبيس","ذكر","المسائية"],["حسن احمد فرحان شاكر","ذكر","المسائية"],["حسن عادل عبد الحسن ساجت","ذكر","المسائية"],["حسنين فاضل كريم عمران","ذكر","المسائية"],["حسنين كريم علي محسن","ذكر","المسائية"],["حسين احمد لفته محسن","ذكر","المسائية"],["حسين باسم محمد مطرود","ذكر","المسائية"],["حسين طارق عبد الرضا","ذكر","المسائية"],["حسين عبد الامير صخيل سربيت","ذكر","المسائية"],["حسين فاضل كاظم رسول","ذكر","المسائية"],["حسين قاسم عبد الحسين خضير","ذكر","المسائية"],["حسين كريم حسن عبدالله","ذكر","المسائية"],["حسين محمد علي محمد حسن","ذكر","المسائية"],["حيدر جواد كاظم داعي","ذكر","المسائية"],["حيدر هاشم محمد فالح","ذكر","المسائية"],["ختام هادي سوادي خميس","أنثى","المسائية"],["رابعة جاسب جبار ثامر","أنثى","المسائية"],["رحمه جابر حسين مرهيج","أنثى","المسائية"],["رضا هادي عبيس ناجي","ذكر","المسائية"],["رياض احمد فليح حسن","ذكر","المسائية"],["زهراء محمد حنون يامين","أنثى","المسائية"],["زينب احمد حمزة عبد","أنثى","المسائية"],["زينب رافد حبيب لفته","أنثى","المسائية"]],"الرابعة|مسائي|B":[["محمد حاكم عاجل عبد","ذكر","الصباحية"],["ضحى عبد الله علي عبيد","أنثى","المسائية"],["طيبه ثامر حمزة داود","أنثى","المسائية"],["عباس حسين ابراهيم رشيد","ذكر","المسائية"],["عبد الرضا مالك حميد","ذكر","المسائية"],["عبد الله عبد الحليم حمود سلمان","ذكر","المسائية"],["عبير رضا نوماس كبيح","أنثى","المسائية"],["عقيل حسين حنون يامين","ذكر","المسائية"],["علي حسن صالح حمود","ذكر","المسائية"],["علي حسين محمد ياسر","ذكر","المسائية"],["علي ضياء غازي عبد علي","ذكر","المسائية"],["علي فارس عدنان مخيف","ذكر","المسائية"],["علي قيس محسن عبد الحسن","ذكر","المسائية"],["علي محمد رمضان فرج","ذكر","المسائية"],["علي محمد علي منديل","ذكر","المسائية"],["علي يحيى لطيف صنيخ","ذكر","المسائية"],["فاطمة  جواد كاظم عبود","أنثى","المسائية"],["فاطمة الزهراء محمد اموري","أنثى","المسائية"],["فاطمة رعد علي حسين","أنثى","المسائية"],["فاطمة طالب جابر عباس","أنثى","المسائية"],["فاطمه خليل برهان حسون","أنثى","المسائية"],["كرار احمد جاسم نصيف","ذكر","المسائية"],["كرار حيدر عبد الله راضي","ذكر","المسائية"],["كرار خضير لعيبي جاسم","ذكر","المسائية"],["كوثر محمد علي محمد حسن","أنثى","المسائية"],["لينا شاكر سوادي غدير","أنثى","المسائية"],["ماهر عطوان هاشم خدام","ذكر","المسائية"],["محمد احمد حمزة مهدي","ذكر","المسائية"],["محمد احمد عبد الكاظم عبيد","ذكر","المسائية"],["محمد الجواد حسان حسين حسن","ذكر","المسائية"]],"الرابعة|مسائي|C":[["فاطمة علي محمد حسين","أنثى","المسائية"],["كرار صبار مطلك سمير","ذكر","المسائية"],["محمد خالد يوسف حمزة","ذكر","المسائية"],["محمد رضا ميثم شهيد","ذكر","المسائية"],["محمد عبد كريم عبد الحمزة","ذكر","المسائية"],["محمد قيس عبد الحسين ضيهود","ذكر","المسائية"],["محمد مصطفى عليوي جياد","ذكر","المسائية"],["محمد ناصر حسين حنيت","ذكر","المسائية"],["محمود طارق بهلول حمود","ذكر","المسائية"],["مرتضى ضرغام جواد جليل","ذكر","المسائية"],["مرتضى عامر لطيف حميد","ذكر","المسائية"],["مروة عقيل كامل غثيث","أنثى","المسائية"],["مروج حيدر مطشر","أنثى","المسائية"],["مريم احمد عبد الرسول مجيد","أنثى","المسائية"],["مريم حسين بهاء","أنثى","المسائية"],["مريم طالب ايدام مطلك","أنثى","المسائية"],["مصطفى حيدر جواد جليل","ذكر","المسائية"],["منتظر احمد حديد علي","ذكر","المسائية"],["منتظر غالب مهدي مطر","ذكر","المسائية"],["منتظر مخلص عودة مهدي","ذكر","المسائية"],["منتهى محمد كاظم عبود","أنثى","المسائية"],["منه الله جلال حنفي اسماعيل","أنثى","المسائية"],["نرجس ماجد سعد عبود","أنثى","المسائية"],["نور الهدى محمد خضير كاظم","أنثى","المسائية"],["نور حيدر حميد طالب","أنثى","المسائية"],["نور حيدر ناهي عبد الكاظم","ذكر","المسائية"],["نور صباح عباس سلمان","أنثى","المسائية"],["هالة ماجد كامل","أنثى","المسائية"],["هيام احمد مطشر  فنر","أنثى","المسائية"],["وسن عامر كريم تالي","أنثى","المسائية"],["وفاء نجاح لفلوف ساجت","أنثى","المسائية"],["ولاء خلف حسين مرزوك","أنثى","المسائية"]]};
+
+// ==================== 4. كود Google Apps Script ====================
+const GOOGLE_APPS_SCRIPT_CODE = `// كود الربط السحابي المتكامل - قسم المحاسبة (2026-2027)
+const SESSIONS_SHEET = "Sessions_DB";
+const STUDENTS_SHEET = "قاعدة_الطلبة";
+const REPORT_SHEET   = "تقرير_الحضور_الشامل";
+
+function doGet(e) {
+  const params = (e && e.parameter) ? e.parameter : {};
+  const action = params.action || "get_data";
+  const callback = params.callback || "";
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // عرض واجهة الموقع مباشرة من رابط Apps Script إذا طُلب action=ui
+    if (!callback && action === "ui") {
+      return HtmlService.createHtmlOutputFromFile("index")
+        .setTitle("نظام إدارة الحضور الإلكتروني - قسم المحاسبة (2026-2027)")
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+        .addMetaTag("viewport", "width=device-width, initial-scale=1.0");
+    }
+
+    // حفظ محاضرة مرسلة من الأستاذ مع تأكيد استلام فوري
+    if (action === "save_session" && params.data) {
+      const session = JSON.parse(params.data);
+      upsertSession(ss, session);
+      rebuildReportFromSheets(ss);
+      return buildResponse({ status: "ok", savedId: session.id }, callback);
+    }
+
+    // حذف محاضرة
+    if (action === "delete_session" && params.id) {
+      deleteSession(ss, params.id);
+      rebuildReportFromSheets(ss);
+      return buildResponse({ status: "ok" }, callback);
+    }
+
+    // جلب جميع المحاضرات المسجلة لرئيس القسم
+    const sessions = readSheetObjects(ss, SESSIONS_SHEET);
+    return buildResponse({ status: "ok", sessions: sessions }, callback);
+
+  } catch (err) {
+    return buildResponse({ status: "error", message: err.toString() }, callback);
+  }
+}
+
+function doPost(e) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const raw = (e.parameter && e.parameter.payload) ? e.parameter.payload : e.postData.contents;
+    const body = JSON.parse(raw);
+    const action = body.action || "upsert_session";
+
+    if (action === "upsert_session" && body.session) {
+      upsertSession(ss, body.session);
+      rebuildReportFromSheets(ss);
+    } else if (action === "delete_session" && body.id) {
+      deleteSession(ss, body.id);
+      rebuildReportFromSheets(ss);
+    } else if (action === "sync_all" || action === "init_sheets") {
+      if (body.students && body.students.length > 0) {
+        writeStudentsSheet(ss, body.students);
+      }
+      rebuildReportFromSheets(ss);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ status: "ok" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function buildResponse(obj, callback) {
+  const json = JSON.stringify(obj);
+  if (callback) {
+    return ContentService.createTextOutput(callback + "(" + json + ");")
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(json)
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function readSheetObjects(ss, sheetName) {
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) return [];
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return [];
+  const headers = data[0];
+  const result = [];
+  for (let i = 1; i < data.length; i++) {
+    const obj = {};
+    for (let j = 0; j < headers.length; j++) {
+      let val = data[i][j];
+      if (headers[j] === "records" && typeof val === "string") {
+        try { val = JSON.parse(val); } catch(e) { val = {}; }
+      }
+      obj[headers[j]] = val;
+    }
+    result.push(obj);
+  }
+  return result;
+}
+
+function upsertSession(ss, session) {
+  let sheet = ss.getSheetByName(SESSIONS_SHEET);
+  const headers = ["id", "date", "stage", "actualShift", "section", "subjectId", "subjectName", "professor", "topic", "updatedAt", "records"];
+  if (!sheet) {
+    sheet = ss.insertSheet(SESSIONS_SHEET);
+    sheet.appendRow(headers);
+  }
+  const data = sheet.getDataRange().getValues();
+  let rowIdx = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(session.id)) {
+      rowIdx = i + 1;
+      break;
+    }
+  }
+  const rowValues = [
+    session.id, session.date, session.stage, session.actualShift, session.section,
+    session.subjectId, session.subjectName, session.professor, session.topic || "",
+    session.updatedAt || new Date().toISOString(), JSON.stringify(session.records || {})
+  ];
+  if (rowIdx > 0) {
+    sheet.getRange(rowIdx, 1, 1, headers.length).setValues([rowValues]);
+  } else {
+    sheet.appendRow(rowValues);
+  }
+}
+
+function deleteSession(ss, id) {
+  const sheet = ss.getSheetByName(SESSIONS_SHEET);
+  if (!sheet) return;
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0]) === String(id)) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+}
+
+function writeStudentsSheet(ss, students) {
+  let sheet = ss.getSheetByName(STUDENTS_SHEET);
+  const headers = ["id", "name", "gender", "studyType", "stage", "actualShift", "section"];
+  if (!sheet) sheet = ss.insertSheet(STUDENTS_SHEET);
+  sheet.clearContents();
+  const rows = [headers];
+  students.forEach(s => {
+    rows.push([s.id, s.name, s.gender, s.studyType, s.stage, s.actualShift, s.section]);
+  });
+  sheet.getRange(1, 1, rows.length, headers.length).setValues(rows);
+  sheet.setRightToLeft(true);
+}
+
+function rebuildReportFromSheets(ss) {
+  const students = readSheetObjects(ss, STUDENTS_SHEET);
+  const sessions = readSheetObjects(ss, SESSIONS_SHEET);
+  if (!students.length) return;
+
+  const COURSE_LECTURES = 15;
+  const subjectsPerStage = { "الثانية": 7, "الثالثة": 7, "الرابعة": 6 };
+
+  let sheet = ss.getSheetByName(REPORT_SHEET);
+  if (!sheet) sheet = ss.insertSheet(REPORT_SHEET, 0);
+  sheet.clear();
+  sheet.setRightToLeft(true);
+
+  const headers = [
+    "التسلسل", "اسم الطالب الرباعي", "الجنس", "الدراسة الأصلية",
+    "المرحلة", "الدوام الفعلي", "الشعبة", "عدد الحضور",
+    "عدد الغياب", "الإجازات", "نسبة الغياب %", "حالة الإنذار"
+  ];
+  const rows = [headers];
+  const bgColors = [];
+
+  students.forEach((st, idx) => {
+    let p = 0, a = 0, e = 0;
+    sessions.forEach(ses => {
+      if (ses.stage === st.stage && ses.actualShift === st.actualShift && ses.section === st.section) {
+        const rec = (ses.records && ses.records[st.id]) ? ses.records[st.id] : "P";
+        if (rec === "P") p++;
+        else if (rec === "A") a++;
+        else if (rec === "E") e++;
+      }
+    });
+
+    const totalCourse = COURSE_LECTURES * (subjectsPerStage[st.stage] || 7);
+    const pct = totalCourse > 0 ? (a / totalCourse) * 100 : 0;
+    const isStage4 = (st.stage === "الرابعة");
+    const w1 = isStage4 ? 5 : 8;
+    const w2 = 10;
+    const ex = isStage4 ? 15 : 14;
+    let statusLabel = "منتظم";
+    let statusBg = "#dcfce7";
+    if (pct >= ex) { statusLabel = "فصل بالغياب"; statusBg = "#fecaca"; }
+    else if (pct >= w2) { statusLabel = "إنذار نهائي"; statusBg = "#fed7aa"; }
+    else if (pct >= w1) { statusLabel = "إنذار أولي"; statusBg = "#fef08a"; }
+
+    rows.push([
+      idx + 1, st.name, st.gender, st.studyType, st.stage, st.actualShift, st.section,
+      Number(p) || 0, Number(a) || 0, Number(e) || 0, pct.toFixed(1) + "%", statusLabel
+    ]);
+    bgColors.push([statusBg]);
+  });
+
+  const range = sheet.getRange(1, 1, rows.length, headers.length);
+  range.setValues(rows);
+  range.setFontFamily("Cairo");
+  range.setVerticalAlignment("middle");
+
+  sheet.getRange(1, 1, 1, headers.length)
+    .setBackground("#1e293b").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center");
+  sheet.setFrozenRows(1);
+
+  if (rows.length > 1) {
+    sheet.getRange(2, 1, rows.length - 1, 1).setHorizontalAlignment("center");
+    sheet.getRange(2, 3, rows.length - 1, 9).setHorizontalAlignment("center");
+    sheet.getRange(2, 8, rows.length - 1, 3).setNumberFormat("0");
+    sheet.getRange(2, 12, rows.length - 1, 1).setBackgrounds(bgColors).setFontWeight("bold").setHorizontalAlignment("center");
+  }
+  sheet.autoResizeColumns(1, headers.length);
+}`;
+
+// ==================== 5. حالة التطبيق والتخزين ====================
+const STORAGE_KEYS = {
+  STUDENTS: 'acc_dept_students_2026_v4',
+  LECTURES: 'acc_dept_lectures_2026_v4',
+  SETTINGS: 'acc_dept_settings_2026_v4',
+  CLOUD_URL: 'acc_dept_cloud_url_2026_v4'
+};
+
+let students = [];
+let lectures = [];
+let settings = {
+  courseLectures: 15,
+  s123Warn1: 8,
+  s123Warn2: 10,
+  s123Expel: 14,
+  s4Warn1: 5,
+  s4Warn2: 10,
+  s4Expel: 15,
+  adminPin: '2026'
+};
+
+let currentAttendanceMap = {};
+let isAdminUnlocked = false;
+let pendingProtectedTab = null;
+
+function buildDefaultStudentsList() {
+  const list = [];
+  let counter = 1;
+  Object.keys(RAW_STUDENTS_GROUPED).forEach(key => {
+    const [stage, actualShift, section] = key.split('|');
+    RAW_STUDENTS_GROUPED[key].forEach(arr => {
+      list.push({
+        id: `STU-${counter++}`,
+        name: arr[0],
+        gender: arr[1],
+        studyType: arr[2],
+        stage: stage,
+        actualShift: actualShift,
+        section: section
+      });
+    });
+  });
+  return list;
+}
+
+function loadState() {
+  try {
+    const savedStudents = localStorage.getItem(STORAGE_KEYS.STUDENTS);
+    students = savedStudents ? JSON.parse(savedStudents) : buildDefaultStudentsList();
+    if (!Array.isArray(students) || students.length === 0) {
+      students = buildDefaultStudentsList();
+    }
+  } catch (e) {
+    students = buildDefaultStudentsList();
+  }
+
+  try {
+    const savedLectures = localStorage.getItem(STORAGE_KEYS.LECTURES);
+    lectures = savedLectures ? JSON.parse(savedLectures) : [];
+  } catch (e) {
+    lectures = [];
+  }
+
+  try {
+    const savedSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    if (savedSettings) {
+      settings = { ...settings, ...JSON.parse(savedSettings) };
+    }
+  } catch (e) {}
+
+  if (!localStorage.getItem(STORAGE_KEYS.CLOUD_URL)) {
+    localStorage.setItem(STORAGE_KEYS.CLOUD_URL, DEFAULT_CLOUD_URL);
+  }
+}
+
+function getCloudUrl() {
+  return (localStorage.getItem(STORAGE_KEYS.CLOUD_URL) || DEFAULT_CLOUD_URL).trim();
+}
+
+function saveStudentsToStorage() {
+  localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students));
+}
+
+function saveLecturesToStorage() {
+  localStorage.setItem(STORAGE_KEYS.LECTURES, JSON.stringify(lectures));
+}
+
+function saveSettingsToStorage() {
+  localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+}
+
+// ==================== 6. نظام الحماية بالرمز السري ====================
+function requestProtectedTab(tabName) {
+  if (isAdminUnlocked) {
+    switchTab(tabName);
+    return;
+  }
+  pendingProtectedTab = tabName;
+  const label = tabName === 'chair' ? 'لوحة رئيس القسم' : 'إدارة البيانات والإعدادات';
+  openModal(`🔒 الدخول إلى ${label}`, `
+    <div class="space-y-3">
+      <p class="text-xs text-slate-600">هذه الواجهة مخصصة لرئيس ومقرر القسم فقط. يرجى إدخال الرمز السري للمتابعة:</p>
+      <input type="password" id="pinVerifyInput" onkeydown="if(event.key==='Enter') verifyAdminPin()" placeholder="أدخل الرمز السري (PIN)" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-center text-base font-extrabold tracking-widest focus:ring-2 focus:ring-blue-500 outline-none" autofocus />
+      <p id="pinErrorMsg" class="hidden text-xs text-rose-600 font-bold text-center">❌ الرمز السري غير صحيح، حاول مرة أخرى.</p>
+      <button onclick="verifyAdminPin()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-sm shadow transition">
+        🔓 فتح الواجهة
+      </button>
+    </div>
+  `);
+  setTimeout(() => {
+    const inp = document.getElementById('pinVerifyInput');
+    if (inp) inp.focus();
+  }, 100);
+}
+
+function verifyAdminPin() {
+  const inp = document.getElementById('pinVerifyInput');
+  if (!inp) return;
+  if (inp.value.trim() === String(settings.adminPin || '2026')) {
+    isAdminUnlocked = true;
+    document.getElementById('lock-icon-chair').textContent = '🔓';
+    document.getElementById('lock-icon-settings').textContent = '🔓';
+    document.getElementById('lockSessionBtn').classList.remove('hidden');
+    closeModal();
+    if (pendingProtectedTab) {
+      switchTab(pendingProtectedTab);
+      pendingProtectedTab = null;
+    }
+    showToast('تم فتح صلاحيات الإدارة بنجاح', '🔓');
+  } else {
+    document.getElementById('pinErrorMsg').classList.remove('hidden');
+    inp.value = '';
+    inp.focus();
+  }
+}
+
+function lockAdminSession() {
+  isAdminUnlocked = false;
+  document.getElementById('lock-icon-chair').textContent = '🔒';
+  document.getElementById('lock-icon-settings').textContent = '🔒';
+  document.getElementById('lockSessionBtn').classList.add('hidden');
+  switchTab('prof');
+  showToast('تم قفل لوحة الإدارة والعودة لواجهة الأستاذ', '🔒');
+}
+
+function updateAdminPin() {
+  const newPin = document.getElementById('newAdminPinInput').value.trim();
+  if (newPin.length < 4) {
+    showToast('يجب أن يتكون الرمز السري من 4 أرقام أو أحرف على الأقل', '⚠️');
+    return;
+  }
+  settings.adminPin = newPin;
+  saveSettingsToStorage();
+  document.getElementById('newAdminPinInput').value = '';
+  showToast('تم تحديث الرمز السري بنجاح', '🔐');
+}
+
+function switchTab(tab) {
+  ['prof', 'chair', 'settings'].forEach(t => {
+    const view = document.getElementById(`view-${t}`);
+    const btn = document.getElementById(`tab-${t}`);
+    if (t === tab) {
+      view.classList.remove('hidden');
+      btn.classList.add('bg-blue-600', 'text-white', 'shadow');
+      btn.classList.remove('text-slate-300');
+    } else {
+      view.classList.add('hidden');
+      btn.classList.remove('bg-blue-600', 'text-white', 'shadow');
+      btn.classList.add('text-slate-300');
+    }
+  });
+
+  if (tab === 'chair') {
+    populateChairSubjects();
+    renderChairReport();
+    syncFromCloud(false);
+  } else if (tab === 'settings') {
+    loadSettingsUI();
+    renderManageStudentsTable();
+  }
+}
+
+// ==================== 7. واجهة الأستاذ التدريسي ====================
+function initProfessorView() {
+  const profSelect = document.getElementById('profSelect');
+  const profSet = new Set();
+  CURRICULUM.forEach(c => c.professors.forEach(p => profSet.add(p)));
+  const sortedProfs = Array.from(profSet).sort((a, b) => a.localeCompare(b, 'ar'));
+
+  sortedProfs.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p;
+    opt.textContent = p;
+    profSelect.appendChild(opt);
+  });
+
+  const dateInput = document.getElementById('lectureDate');
+  if (!dateInput.value) {
+    dateInput.value = new Date().toISOString().split('T')[0];
+  }
+
+  onProfessorChange();
+}
+
+function onProfessorChange() {
+  const selectedProf = document.getElementById('profSelect').value;
+  const subjectSelect = document.getElementById('subjectSelect');
+  subjectSelect.innerHTML = '';
+
+  const filtered = selectedProf === 'ALL'
+    ? CURRICULUM
+    : CURRICULUM.filter(c => c.professors.includes(selectedProf));
+
+  filtered.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = `${c.subject} — (المرحلة ${c.stage})`;
+    subjectSelect.appendChild(opt);
+  });
+
+  onSubjectChange();
+}
+
+function onSubjectChange() {
+  onShiftOrSectionChange();
+}
+
+function onShiftOrSectionChange() {
+  const subId = document.getElementById('subjectSelect').value;
+  const course = CURRICULUM.find(c => c.id === subId) || CURRICULUM[0];
+  const shift = document.getElementById('shiftSelect').value;
+  const sectionSelect = document.getElementById('sectionSelect');
+  const prevSection = sectionSelect.value;
+
+  const availableSections = new Set(['A', 'B']);
+  if (course.stage === 'الثالثة' || course.stage === 'الرابعة') availableSections.add('C');
+  students.forEach(s => {
+    if (s.stage === course.stage && s.actualShift === shift) availableSections.add(s.section);
+  });
+
+  sectionSelect.innerHTML = '';
+  Array.from(availableSections).sort().forEach(sec => {
+    const opt = document.createElement('option');
+    opt.value = sec;
+    opt.textContent = `شعبة ${sec}`;
+    sectionSelect.appendChild(opt);
+  });
+
+  if (prevSection && availableSections.has(prevSection)) {
+    sectionSelect.value = prevSection;
+  }
+
+  checkExistingSession();
+}
+
+function getFilteredStudentsForSession() {
+  const subId = document.getElementById('subjectSelect').value;
+  const course = CURRICULUM.find(c => c.id === subId) || CURRICULUM[0];
+  const shift = document.getElementById('shiftSelect').value;
+  const section = document.getElementById('sectionSelect').value;
+
+  return students
+    .filter(s => s.stage === course.stage && s.actualShift === shift && s.section === section)
+    .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+}
+
+function checkExistingSession() {
+  const subId = document.getElementById('subjectSelect').value;
+  const shift = document.getElementById('shiftSelect').value;
+  const section = document.getElementById('sectionSelect').value;
+  const date = document.getElementById('lectureDate').value;
+  const sessionId = `${subId}|${shift}|${section}|${date}`;
+
+  const existing = lectures.find(l => l.id === sessionId);
+  const groupStudents = getFilteredStudentsForSession();
+  currentAttendanceMap = {};
+
+  if (existing) {
+    document.getElementById('existingBanner').classList.remove('hidden');
+    document.getElementById('existingLastUpdated').textContent = existing.updatedAt ? `آخر تحديث: ${existing.updatedAt.slice(0, 16).replace('T', ' ')}` : '';
+    document.getElementById('lectureTopic').value = existing.topic || '';
+    groupStudents.forEach(s => {
+      currentAttendanceMap[s.id] = (existing.records && existing.records[s.id]) ? existing.records[s.id] : 'P';
+    });
+  } else {
+    document.getElementById('existingBanner').classList.add('hidden');
+    document.getElementById('lectureTopic').value = '';
+    groupStudents.forEach(s => {
+      currentAttendanceMap[s.id] = 'P';
+    });
+  }
+
+  renderAttendanceList();
+  renderSectionHistory();
+}
+
+function setStudentStatus(studentId, status) {
+  currentAttendanceMap[studentId] = status;
+  renderAttendanceList();
+}
+
+function markAllAs(status) {
+  Object.keys(currentAttendanceMap).forEach(id => {
+    currentAttendanceMap[id] = status;
+  });
+  renderAttendanceList();
+}
+
+function renderAttendanceList() {
+  const tbody = document.getElementById('attendanceTableBody');
+  const query = (document.getElementById('studentSearchInput').value || '').trim();
+  const groupStudents = getFilteredStudentsForSession();
+
+  let present = 0, absent = 0, excused = 0;
+  groupStudents.forEach(s => {
+    const st = currentAttendanceMap[s.id] || 'P';
+    if (st === 'P') present++;
+    else if (st === 'A') absent++;
+    else if (st === 'E') excused++;
+  });
+
+  document.getElementById('countTotal').textContent = groupStudents.length;
+  document.getElementById('countPresent').textContent = present;
+  document.getElementById('countAbsent').textContent = absent;
+  document.getElementById('countExcused').textContent = excused;
+
+  const visibleStudents = query
+    ? groupStudents.filter(s => s.name.includes(query))
+    : groupStudents;
+
+  if (visibleStudents.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-400 font-bold">لا يوجد طلبة مطابقون في هذه الشعبة</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = visibleStudents.map((s, idx) => {
+    const st = currentAttendanceMap[s.id] || 'P';
+    const isTransferred = (s.studyType === 'المسائية' && s.actualShift === 'صباحي') || (s.studyType === 'الصباحية' && s.actualShift === 'مسائي');
+    const rowBg = st === 'A' ? 'bg-rose-50/60' : (st === 'E' ? 'bg-amber-50/60' : 'hover:bg-slate-50');
+
+    return `
+      <tr class="${rowBg} transition">
+        <td class="py-2.5 px-4 text-center font-bold text-slate-500">${idx + 1}</td>
+        <td class="py-2.5 px-4 font-bold text-slate-800">
+          ${s.name}
+          ${isTransferred ? `<span class="mr-1.5 text-[10px] bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-bold">دوام مشترك</span>` : ''}
+        </td>
+        <td class="py-2.5 px-3 hidden sm:table-cell text-center text-xs text-slate-600">${s.gender}</td>
+        <td class="py-2.5 px-3 hidden md:table-cell text-center text-xs">
+          <span class="px-2 py-0.5 rounded-md ${s.studyType === 'الصباحية' ? 'bg-sky-50 text-sky-700' : 'bg-purple-50 text-purple-700'} font-semibold">${s.studyType}</span>
+        </td>
+        <td class="py-2.5 px-4 text-center">
+          <div class="inline-flex rounded-xl bg-slate-100 p-1 gap-1">
+            <button onclick="setStudentStatus('${s.id}', 'P')" class="status-btn px-3 py-1.5 rounded-lg text-xs font-extrabold ${st === 'P' ? 'bg-emerald-600 text-white shadow' : 'text-slate-600 hover:bg-white'}">✓ حاضر</button>
+            <button onclick="setStudentStatus('${s.id}', 'A')" class="status-btn px-3 py-1.5 rounded-lg text-xs font-extrabold ${st === 'A' ? 'bg-rose-600 text-white shadow' : 'text-slate-600 hover:bg-white'}">✕ غائب</button>
+            <button onclick="setStudentStatus('${s.id}', 'E')" class="status-btn px-3 py-1.5 rounded-lg text-xs font-extrabold ${st === 'E' ? 'bg-amber-500 text-white shadow' : 'text-slate-600 hover:bg-white'}">📄 مجاز</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderSectionHistory() {
+  const subId = document.getElementById('subjectSelect').value;
+  const shift = document.getElementById('shiftSelect').value;
+  const section = document.getElementById('sectionSelect').value;
+  const container = document.getElementById('sectionHistoryList');
+
+  const history = lectures
+    .filter(l => l.subjectId === subId && l.actualShift === shift && l.section === section)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  if (history.length === 0) {
+    container.innerHTML = `<div class="col-span-full text-xs text-slate-400 py-2">لم تُسجل محاضرات سابقة لهذه الشعبة بعد.</div>`;
+    return;
+  }
+
+  container.innerHTML = history.map(l => {
+    const vals = Object.values(l.records || {});
+    const p = vals.filter(v => v === 'P').length;
+    const a = vals.filter(v => v === 'A').length;
+    const e = vals.filter(v => v === 'E').length;
+    return `
+      <div onclick="loadLectureForEdit('${l.id}')" class="cursor-pointer border border-slate-200 hover:border-blue-400 rounded-xl p-3 bg-slate-50/60 hover:bg-blue-50/40 transition">
+        <div class="flex items-center justify-between text-xs font-extrabold text-slate-800">
+          <span>📅 ${l.date}</span>
+          <span class="text-blue-600">تعديل ✎</span>
+        </div>
+        <div class="text-[11px] text-slate-500 mt-1 truncate">${l.topic || 'محاضرة اعتيادية'}</div>
+        <div class="flex gap-2 mt-2 text-[11px] font-bold">
+          <span class="text-emerald-700">حضور: ${p}</span>
+          <span class="text-rose-700">غياب: ${a}</span>
+          <span class="text-amber-700">إجازة: ${e}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function loadLectureForEdit(sessionId) {
+  const lec = lectures.find(l => l.id === sessionId);
+  if (!lec) return;
+  document.getElementById('profSelect').value = 'ALL';
+  onProfessorChange();
+  document.getElementById('subjectSelect').value = lec.subjectId;
+  document.getElementById('shiftSelect').value = lec.actualShift;
+  onShiftOrSectionChange();
+  document.getElementById('sectionSelect').value = lec.section;
+  document.getElementById('lectureDate').value = lec.date;
+  checkExistingSession();
+  switchTab('prof');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function saveCurrentLecture() {
+  const subId = document.getElementById('subjectSelect').value;
+  const course = CURRICULUM.find(c => c.id === subId) || CURRICULUM[0];
+  const profVal = document.getElementById('profSelect').value;
+  const professor = profVal === 'ALL' ? course.professors.join(' - ') : profVal;
+  const shift = document.getElementById('shiftSelect').value;
+  const section = document.getElementById('sectionSelect').value;
+  const date = document.getElementById('lectureDate').value;
+  const topic = document.getElementById('lectureTopic').value.trim();
+
+  if (!date) {
+    showToast('يرجى تحديد تاريخ المحاضرة أولاً', '⚠️');
+    return;
+  }
+
+  // ضغط السجل بإرسال الغائبين (A) والمجازين (E) فقط لتقليل الحجم وضمان تأكيد الاستلام الفوري من السيرفر
+  const compactRecords = {};
+  Object.keys(currentAttendanceMap).forEach(stuId => {
+    if (currentAttendanceMap[stuId] === 'A' || currentAttendanceMap[stuId] === 'E') {
+      compactRecords[stuId] = currentAttendanceMap[stuId];
+    }
+  });
+
+  const sessionId = `${subId}|${shift}|${section}|${date}`;
+  const sessionObj = {
+    id: sessionId,
+    date: date,
+    stage: course.stage,
+    actualShift: shift,
+    section: section,
+    subjectId: course.id,
+    subjectName: course.subject,
+    professor: professor,
+    topic: topic,
+    updatedAt: new Date().toISOString(),
+    records: compactRecords
+  };
+
+  const localObj = { ...sessionObj, records: { ...currentAttendanceMap } };
+  const idx = lectures.findIndex(l => l.id === sessionId);
+  if (idx >= 0) lectures[idx] = localObj;
+  else lectures.push(localObj);
+
+  saveLecturesToStorage();
+  checkExistingSession();
+
+  const saveBtn = document.getElementById('saveBtn');
+  saveBtn.disabled = true;
+  saveBtn.textContent = '⏳ جاري الإرسال وتأكيد الاستلام من السحابة...';
+
+  try {
+    const res = await callCloudJsonp({
+      action: 'save_session',
+      data: JSON.stringify(sessionObj)
+    });
+    if (res && res.status === 'ok') {
+      updateCloudBadge('ok', 'تم الاستلام في Google Sheets ✓');
+      showToast('✅ تم استلام وتثبيت الحضور في قاعدة بيانات القسم بنجاح!', '☁️');
+    } else {
+      throw new Error('لم يرد السيرفر بالتأكيد');
+    }
+  } catch (err) {
+    updateCloudBadge('error', 'فشل الوصول للسحابة');
+    showToast('⚠️ تعذر الوصول للسحابة! تأكد من نشر الكود المحدّث في Apps Script.', '❌');
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = '💾 حفظ وإرسال الحضور للسحابة';
+  }
+}
+
+// ==================== 8. معادلة الـ 15 محاضرة وحسابات الإنذارات ====================
+function getStageThresholds(stage) {
+  const isStage4 = (stage === 'الرابعة');
+  return {
+    w1: isStage4 ? Number(settings.s4Warn1 || 5) : Number(settings.s123Warn1 || 8),
+    w2: isStage4 ? Number(settings.s4Warn2 || 10) : Number(settings.s123Warn2 || 10),
+    expel: isStage4 ? Number(settings.s4Expel || 15) : Number(settings.s123Expel || 14)
+  };
+}
+
+function calculateStudentStats(student, subjectFilter = 'ALL') {
+  let present = 0, absent = 0, excused = 0;
+
+  lectures.forEach(lec => {
+    if (lec.stage !== student.stage || lec.actualShift !== student.actualShift || lec.section !== student.section) return;
+    if (subjectFilter !== 'ALL' && lec.subjectId !== subjectFilter) return;
+
+    const status = lec.records ? lec.records[student.id] : null;
+    if (status === 'P') present++;
+    else if (status === 'A') absent++;
+    else if (status === 'E') excused++;
+  });
+
+  const courseLectures = Number(settings.courseLectures) || 15;
+  let denominator = courseLectures;
+
+  if (subjectFilter === 'ALL') {
+    const stageSubjectsCount = CURRICULUM.filter(c => c.stage === student.stage).length || 7;
+    denominator = courseLectures * stageSubjectsCount;
+  }
+
+  const pct = denominator > 0 ? (absent / denominator) * 100 : 0;
+  const th = getStageThresholds(student.stage);
+
+  let statusCode = 'OK';
+  let statusLabel = 'منتظم';
+  if (pct >= th.expel) {
+    statusCode = 'EXPELLED';
+    statusLabel = 'فصل بالغياب';
+  } else if (pct >= th.w2) {
+    statusCode = 'WARN2';
+    statusLabel = 'إنذار نهائي';
+  } else if (pct >= th.w1) {
+    statusCode = 'WARN1';
+    statusLabel = 'إنذار أولي';
+  }
+
+  return { present, absent, excused, denominator, pct, statusCode, statusLabel };
+}
+
+function buildFullReportRows() {
+  return students.map(s => {
+    const st = calculateStudentStats(s, 'ALL');
+    return {
+      name: s.name,
+      gender: s.gender,
+      studyType: s.studyType,
+      stage: s.stage,
+      actualShift: s.actualShift,
+      section: s.section,
+      present: st.present,
+      absent: st.absent,
+      excused: st.excused,
+      pct: Number(st.pct.toFixed(1)),
+      statusLabel: st.statusLabel
+    };
+  });
+}
+
+// ==================== 9. لوحة رئيس القسم والتصدير ====================
+function populateChairSubjects() {
+  const stage = document.getElementById('chairStageFilter').value;
+  const subSelect = document.getElementById('chairSubjectFilter');
+  const prev = subSelect.value;
+  subSelect.innerHTML = '<option value="ALL">جميع المواد (تراكمي)</option>';
+
+  const list = stage === 'ALL' ? CURRICULUM : CURRICULUM.filter(c => c.stage === stage);
+  list.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = `${c.subject} (${c.stage})`;
+    subSelect.appendChild(opt);
+  });
+
+  if (Array.from(subSelect.options).some(o => o.value === prev)) {
+    subSelect.value = prev;
+  }
+}
+
+function onChairFilterChange() {
+  populateChairSubjects();
+  renderChairReport();
+}
+
+function renderChairReport() {
+  const stage = document.getElementById('chairStageFilter').value;
+  const shift = document.getElementById('chairShiftFilter').value;
+  const section = document.getElementById('chairSectionFilter').value;
+  const subject = document.getElementById('chairSubjectFilter').value;
+  const statusFilter = document.getElementById('chairStatusFilter').value;
+  const search = (document.getElementById('chairSearchInput').value || '').trim();
+
+  const courseLecs = Number(settings.courseLectures) || 15;
+  document.getElementById('displayCourseLectures').textContent = courseLecs;
+  document.getElementById('tableMaxLectures').textContent = subject === 'ALL' ? `${courseLecs}×المواد` : courseLecs;
+
+  let w1Count = 0, w2Count = 0, expCount = 0;
+  students.forEach(s => {
+    const st = calculateStudentStats(s, subject);
+    if (st.statusCode === 'WARN1') w1Count++;
+    else if (st.statusCode === 'WARN2') w2Count++;
+    else if (st.statusCode === 'EXPELLED') expCount++;
+  });
+
+  document.getElementById('statTotalStudents').textContent = students.length;
+  document.getElementById('statTotalLectures').textContent = lectures.length;
+  document.getElementById('statWarn1').textContent = w1Count;
+  document.getElementById('statWarn2').textContent = w2Count;
+  document.getElementById('statExpelled').textContent = expCount;
+
+  const filtered = students.filter(s => {
+    if (stage !== 'ALL' && s.stage !== stage) return false;
+    if (shift !== 'ALL' && s.actualShift !== shift) return false;
+    if (section !== 'ALL' && s.section !== section) return false;
+    if (search && !s.name.includes(search)) return false;
+
+    const st = calculateStudentStats(s, subject);
+    if (statusFilter === 'ALERTS_ONLY' && st.statusCode === 'OK') return false;
+    if (statusFilter === 'EXPELLED' && st.statusCode !== 'EXPELLED') return false;
+    if (statusFilter === 'WARN2' && st.statusCode !== 'WARN2') return false;
+    if (statusFilter === 'WARN1' && st.statusCode !== 'WARN1') return false;
+    return true;
+  });
+
+  const tbody = document.getElementById('chairReportBody');
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-400 font-bold">لا توجد بيانات مطابقة لخيارات الفلترة</td></tr>`;
+  } else {
+    tbody.innerHTML = filtered.map((s, idx) => {
+      const st = calculateStudentStats(s, subject);
+      let badge = `<span class="bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full text-xs font-bold">🟢 منتظم</span>`;
+      if (st.statusCode === 'WARN1') badge = `<span class="bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full text-xs font-bold">🟡 إنذار أولي</span>`;
+      else if (st.statusCode === 'WARN2') badge = `<span class="bg-orange-100 text-orange-800 px-2.5 py-1 rounded-full text-xs font-bold">🟠 إنذار نهائي</span>`;
+      else if (st.statusCode === 'EXPELLED') badge = `<span class="bg-rose-100 text-rose-800 px-2.5 py-1 rounded-full text-xs font-bold">🔴 فصل بالغياب</span>`;
+
+      return `
+        <tr class="hover:bg-slate-50">
+          <td class="py-2.5 px-3 text-center text-slate-500 font-bold">${idx + 1}</td>
+          <td class="py-2.5 px-4 font-bold text-slate-800">${s.name}</td>
+          <td class="py-2.5 px-3 text-center text-xs font-semibold">${s.stage}</td>
+          <td class="py-2.5 px-3 text-center text-xs font-semibold">${s.actualShift}</td>
+          <td class="py-2.5 px-3 text-center text-xs font-bold">${s.section}</td>
+          <td class="py-2.5 px-3 text-center font-bold text-emerald-700">${st.present}</td>
+          <td class="py-2.5 px-3 text-center font-bold text-rose-700">${st.absent}</td>
+          <td class="py-2.5 px-3 text-center font-bold text-amber-700">${st.excused}</td>
+          <td class="py-2.5 px-3 text-center font-extrabold">${st.pct.toFixed(1)}%</td>
+          <td class="py-2.5 px-3 text-center">${badge}</td>
+          <td class="py-2.5 px-3 text-center no-print">
+            <button onclick="showStudentDetails('${s.id}')" class="text-blue-600 hover:underline text-xs font-bold">التفاصيل</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  const recentBody = document.getElementById('recentLecturesBody');
+  const sortedLectures = [...lectures].sort((a, b) => (b.updatedAt || b.date).localeCompare(a.updatedAt || a.date)).slice(0, 25);
+  if (sortedLectures.length === 0) {
+    recentBody.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-slate-400">لا توجد محاضرات مسجلة بعد</td></tr>`;
+  } else {
+    recentBody.innerHTML = sortedLectures.map(l => {
+      const vals = Object.values(l.records || {});
+      const p = vals.filter(v => v === 'P').length;
+      const a = vals.filter(v => v === 'A').length;
+      return `
+        <tr class="hover:bg-slate-50">
+          <td class="py-2.5 px-3 font-bold">${l.date}</td>
+          <td class="py-2.5 px-3 font-bold text-slate-800">${l.subjectName}</td>
+          <td class="py-2.5 px-3 text-xs text-slate-600">${l.professor}</td>
+          <td class="py-2.5 px-3 text-center text-xs font-bold">${l.stage} • ${l.actualShift} • شعبة ${l.section}</td>
+          <td class="py-2.5 px-3 text-center text-xs font-bold"><span class="text-emerald-700">${p} حاضر</span> / <span class="text-rose-700">${a} غائب</span></td>
+          <td class="py-2.5 px-3 text-center no-print space-x-1 space-x-reverse">
+            <button onclick="loadLectureForEdit('${l.id}')" class="text-blue-600 hover:underline text-xs font-bold">فتح</button>
+            <button onclick="confirmDeleteLecture('${l.id}')" class="text-rose-600 hover:underline text-xs font-bold">حذف</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+}
+
+function showStudentDetails(studentId) {
+  const s = students.find(x => x.id === studentId);
+  if (!s) return;
+  const stageCourses = CURRICULUM.filter(c => c.stage === s.stage);
+  const courseLecs = Number(settings.courseLectures) || 15;
+  const th = getStageThresholds(s.stage);
+
+  const rowsHtml = stageCourses.map(c => {
+    const st = calculateStudentStats(s, c.id);
+    return `
+      <tr class="border-b border-slate-100">
+        <td class="py-2 px-3 font-bold">${c.subject}</td>
+        <td class="py-2 px-3 text-center text-emerald-700 font-bold">${st.present}</td>
+        <td class="py-2 px-3 text-center text-rose-700 font-bold">${st.absent}</td>
+        <td class="py-2 px-3 text-center text-amber-700 font-bold">${st.excused}</td>
+        <td class="py-2 px-3 text-center font-extrabold">${st.pct.toFixed(1)}%</td>
+        <td class="py-2 px-3 text-center font-bold">${st.statusLabel}</td>
+      </tr>
+    `;
+  }).join('');
+
+  openModal(`📋 سجل الطالب: ${s.name}`, `
+    <div class="bg-slate-50 p-3 rounded-xl text-xs flex flex-wrap gap-4 font-bold text-slate-700">
+      <span>المرحلة: ${s.stage}</span>
+      <span>الدوام: ${s.actualShift}</span>
+      <span>الشعبة: ${s.section}</span>
+      <span>عتبات الإنذار: ${th.w1}% / ${th.w2}% / فصل ${th.expel}% (من ${courseLecs} محاضرة)</span>
+    </div>
+    <table class="w-full text-right text-xs border-collapse mt-2">
+      <thead>
+        <tr class="bg-slate-800 text-white">
+          <th class="py-2 px-3">المادة</th>
+          <th class="py-2 px-3 text-center">حضور</th>
+          <th class="py-2 px-3 text-center">غياب</th>
+          <th class="py-2 px-3 text-center">إجازة</th>
+          <th class="py-2 px-3 text-center">النسبة</th>
+          <th class="py-2 px-3 text-center">الموقف</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `);
+}
+
+async function confirmDeleteLecture(sessionId) {
+  if (!confirm('هل أنت متأكد من حذف سجل هذه المحاضرة نهائياً؟')) return;
+  lectures = lectures.filter(l => l.id !== sessionId);
+  saveLecturesToStorage();
+  renderChairReport();
+  showToast('جاري حذف سجل المحاضرة من السحابة...', '🗑️');
+  try {
+    await callCloudJsonp({ action: 'delete_session', id: sessionId });
+    showToast('تم حذف سجل المحاضرة من السحابة بنجاح', '✅');
+  } catch (e) {
+    showToast('تم الحذف محلياً، تعذر الحذف من السحابة', '⚠️');
+  }
+}
+
+function exportReportCSV() {
+  const stage = document.getElementById('chairStageFilter').value;
+  const shift = document.getElementById('chairShiftFilter').value;
+  const section = document.getElementById('chairSectionFilter').value;
+  const subject = document.getElementById('chairSubjectFilter').value;
+
+  const filtered = students.filter(s => {
+    if (stage !== 'ALL' && s.stage !== stage) return false;
+    if (shift !== 'ALL' && s.actualShift !== shift) return false;
+    if (section !== 'ALL' && s.section !== section) return false;
+    return true;
+  });
+
+  const headers = ['التسلسل', 'اسم الطالب الرباعي', 'الجنس', 'الدراسة الأصلية', 'المرحلة', 'الدوام الفعلي', 'الشعبة', 'عدد الحضور', 'عدد الغياب', 'الإجازات', 'نسبة الغياب %', 'حالة الإنذار'];
+  const csvRows = [headers.join(',')];
+
+  filtered.forEach((s, idx) => {
+    const st = calculateStudentStats(s, subject);
+    const row = [
+      idx + 1, `"${s.name}"`, `"${s.gender}"`, `"${s.studyType}"`,
+      `"${s.stage}"`, `"${s.actualShift}"`, `"${s.section}"`,
+      st.present, st.absent, st.excused, `${st.pct.toFixed(1)}%`, `"${st.statusLabel}"`
+    ];
+    csvRows.push(row.join(','));
+  });
+
+  const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `تقرير_حضور_المحاسبة_${new Date().toISOString().slice(0,10)}.csv`;
+  link.click();
+}
+
+// ==================== 10. إدارة البيانات والإعدادات والربط السحابي ====================
+function loadSettingsUI() {
+  document.getElementById('cloudUrlInput').value = getCloudUrl();
+  document.getElementById('courseLecturesInput').value = settings.courseLectures || 15;
+  document.getElementById('s123Warn1').value = settings.s123Warn1 || 8;
+  document.getElementById('s123Warn2').value = settings.s123Warn2 || 10;
+  document.getElementById('s123Expel').value = settings.s123Expel || 14;
+  document.getElementById('s4Warn1').value = settings.s4Warn1 || 5;
+  document.getElementById('s4Warn2').value = settings.s4Warn2 || 10;
+  document.getElementById('s4Expel').value = settings.s4Expel || 15;
+}
+
+function saveWarningSettings() {
+  settings.courseLectures = Number(document.getElementById('courseLecturesInput').value) || 15;
+  settings.s123Warn1 = Number(document.getElementById('s123Warn1').value) || 8;
+  settings.s123Warn2 = Number(document.getElementById('s123Warn2').value) || 10;
+  settings.s123Expel = Number(document.getElementById('s123Expel').value) || 14;
+  settings.s4Warn1 = Number(document.getElementById('s4Warn1').value) || 5;
+  settings.s4Warn2 = Number(document.getElementById('s4Warn2').value) || 10;
+  settings.s4Expel = Number(document.getElementById('s4Expel').value) || 15;
+  saveSettingsToStorage();
+  renderChairReport();
+  showToast('تم حفظ ضوابط الكورس ونسب الإنذار وتحديث التقارير', '⚖️');
+}
+
+function saveCloudUrl() {
+  const url = document.getElementById('cloudUrlInput').value.trim();
+  if (!url) {
+    showToast('يرجى إدخال رابط Apps Script صحيح', '⚠️');
+    return;
+  }
+  localStorage.setItem(STORAGE_KEYS.CLOUD_URL, url);
+  updateCloudBadge('ok', 'السحابة جاهزة (Sheets)');
+  syncFromCloud(true);
+}
+
+function updateCloudBadge(state, text) {
+  const dot = document.getElementById('cloudDot');
+  const label = document.getElementById('cloudText');
+  const badge = document.getElementById('cloudStatusBadge');
+  if (!dot || !label) return;
+  label.textContent = text;
+  dot.className = 'w-2 h-2 rounded-full ' + (
+    state === 'ok' ? 'bg-emerald-400' :
+    state === 'connecting' ? 'bg-amber-400 animate-ping' : 'bg-rose-400'
+  );
+  if (badge) {
+    badge.className = 'cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-slate-700 transition ' + (
+      state === 'ok' ? 'text-emerald-300' : state === 'connecting' ? 'text-amber-300' : 'text-rose-300'
+    );
+  }
+}
+
+async function pushToCloud(payloadObj) {
+  const url = getCloudUrl();
+  if (!url) return;
+  updateCloudBadge('connecting', 'جاري الإرسال للسحابة...');
+  try {
+    await fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payloadObj)
+    });
+    updateCloudBadge('ok', 'متصل بالسحابة (Sheets)');
+    showToast('تم حفظ وإرسال الحضور إلى Google Sheets بنجاح', '☁️');
+  } catch (err) {
+    updateCloudBadge('error', 'تعذر الإرسال للسحابة');
+    showToast('تم الحفظ محلياً، تعذر الوصول للسحابة', '⚠️');
+  }
+}
+
+async function initializeCloudSheets() {
+  const url = getCloudUrl();
+  if (!url) {
+    showToast('يرجى حفظ رابط Apps Script أولاً', '⚠️');
+    return;
+  }
+  showToast('جاري تجهيز وتعبئة ملف Google Sheets بجميع الطلبة...', '⏳');
+  await pushToCloud({
+    action: 'init_sheets',
+    students: students,
+    reportRows: buildFullReportRows()
+  });
+}
+
+function callCloudJsonp(paramsObj) {
+  const baseUrl = getCloudUrl();
+  return new Promise((resolve, reject) => {
+    const cbName = 'gas_cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+    const script = document.createElement('script');
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('JSONP timeout'));
+    }, 15000);
+
+    function cleanup() {
+      clearTimeout(timer);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    window[cbName] = function(data) {
+      cleanup();
+      resolve(data);
+    };
+
+    const queryParts = [`callback=${cbName}`, `t=${Date.now()}`];
+    Object.keys(paramsObj).forEach(k => {
+      queryParts.push(`${encodeURIComponent(k)}=${encodeURIComponent(paramsObj[k])}`);
+    });
+
+    const sep = baseUrl.includes('?') ? '&' : '?';
+    script.src = `${baseUrl}${sep}${queryParts.join('&')}`;
+    script.onerror = function() {
+      cleanup();
+      reject(new Error('JSONP script error'));
+    };
+    document.body.appendChild(script);
+  });
+}
+
+async function syncFromCloud(notify = false) {
+  const url = getCloudUrl();
+  if (!url) return;
+  updateCloudBadge('connecting', 'جاري جلب السجلات...');
+
+  try {
+    const data = await callCloudJsonp({ action: 'get_data' });
+    if (data && data.status === 'ok') {
+      lectures = (data.sessions || []).map(ses => {
+        const fullRec = { ...(ses.records || {}) };
+        students.forEach(st => {
+          if (st.stage === ses.stage && st.actualShift === ses.actualShift && st.section === ses.section) {
+            if (!fullRec[st.id]) fullRec[st.id] = 'P';
+          }
+        });
+        return { ...ses, records: fullRec };
+      });
+      saveLecturesToStorage();
+      updateCloudBadge('ok', 'السحابة متصلة (Sheets)');
+      checkExistingSession();
+      if (!document.getElementById('view-chair').classList.contains('hidden')) {
+        renderChairReport();
+      }
+      if (notify) showToast(`تم جلب ${lectures.length} محاضرة من السحابة بنجاح`, '☁️');
+    } else {
+      throw new Error('Invalid response');
+    }
+  } catch (err) {
+    updateCloudBadge('error', 'تعذر الاتصال بالسحابة');
+    if (notify) {
+      showToast('تعذر جلب البيانات من السحابة. تأكد من تحديث كود Apps Script وصلاحيات النشر (Anyone).', '⚠️');
+    }
+  }
+}
+
+function openAppsScriptModal() {
+  openModal('</> كود Google Apps Script المحدّث', `
+    <p class="text-xs text-slate-600">انسخ الكود التالي بالكامل والصقه في محرر <strong>Apps Script</strong> داخل ملف Google Sheets، ثم انشره كـ <strong>تطبيق ويب (Web app)</strong> بصلاحية <strong>أي شخص (Anyone)</strong>:</p>
+    <div class="relative">
+      <button onclick="copyScriptToClipboard()" class="absolute top-2 left-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow">📋 نسخ الكود</button>
+      <textarea id="appsScriptTextarea" readonly dir="ltr" class="w-full h-72 rounded-xl border border-slate-300 bg-slate-900 text-emerald-300 font-mono text-xs p-3 text-left">${GOOGLE_APPS_SCRIPT_CODE}</textarea>
+    </div>
+  `);
+}
+
+function copyScriptToClipboard() {
+  const ta = document.getElementById('appsScriptTextarea');
+  ta.select();
+  navigator.clipboard.writeText(ta.value);
+  showToast('تم نسخ كود Google Apps Script إلى الحافظة', '📋');
+}
+
+// ==================== 11. استيراد وإدارة الطلبة ====================
+async function addNewStudent() {
+  const name = document.getElementById('newStudentName').value.trim();
+  const stage = document.getElementById('newStudentStage').value;
+  const actualShift = document.getElementById('newStudentShift').value;
+  const section = document.getElementById('newStudentSection').value;
+  const gender = document.getElementById('newStudentGender').value;
+
+  if (!name) {
+    showToast('يرجى إدخال اسم الطالب الرباعي', '⚠️');
+    return;
+  }
+
+  const newStu = {
+    id: `STU-${Date.now()}`,
+    name, gender,
+    studyType: actualShift === 'صباحي' ? 'الصباحية' : 'المسائية',
+    stage, actualShift, section
+  };
+
+  students.push(newStu);
+  saveStudentsToStorage();
+  document.getElementById('newStudentName').value = '';
+  renderManageStudentsTable();
+  checkExistingSession();
+  showToast('تمت إضافة الطالب بنجاح', '✅');
+
+  await pushToCloud({
+    action: 'sync_all',
+    students: students,
+    reportRows: buildFullReportRows()
+  });
+}
+
+function renderManageStudentsTable() {
+  const q = (document.getElementById('manageStudentSearch').value || '').trim();
+  const tbody = document.getElementById('manageStudentsBody');
+  const list = q ? students.filter(s => s.name.includes(q)) : students.slice(0, 50);
+
+  tbody.innerHTML = list.map(s => `
+    <tr class="hover:bg-slate-50">
+      <td class="py-2 px-3 font-bold text-slate-800">${s.name}</td>
+      <td class="py-2 px-3 text-center">${s.stage}</td>
+      <td class="py-2 px-3 text-center">
+        <select onchange="updateStudentField('${s.id}', 'actualShift', this.value)" class="rounded border border-slate-300 px-2 py-1 text-xs font-bold bg-white">
+          <option value="صباحي" ${s.actualShift === 'صباحي' ? 'selected' : ''}>صباحي</option>
+          <option value="مسائي" ${s.actualShift === 'مسائي' ? 'selected' : ''}>مسائي</option>
+        </select>
+      </td>
+      <td class="py-2 px-3 text-center">
+        <select onchange="updateStudentField('${s.id}', 'section', this.value)" class="rounded border border-slate-300 px-2 py-1 text-xs font-bold bg-white">
+          <option value="A" ${s.section === 'A' ? 'selected' : ''}>A</option>
+          <option value="B" ${s.section === 'B' ? 'selected' : ''}>B</option>
+          <option value="C" ${s.section === 'C' ? 'selected' : ''}>C</option>
+          <option value="D" ${s.section === 'D' ? 'selected' : ''}>D</option>
+        </select>
+      </td>
+      <td class="py-2 px-3 text-center">
+        <button onclick="deleteStudent('${s.id}')" class="text-rose-600 hover:underline font-bold">حذف</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function updateStudentField(id, field, val) {
+  const s = students.find(x => x.id === id);
+  if (!s) return;
+  s[field] = val;
+  saveStudentsToStorage();
+  checkExistingSession();
+  showToast('تم تحديث بيانات الطالب', '✅');
+}
+
+async function deleteStudent(id) {
+  if (!confirm('هل تريد حذف هذا الطالب من القائمة؟')) return;
+  students = students.filter(s => s.id !== id);
+  saveStudentsToStorage();
+  renderManageStudentsTable();
+  checkExistingSession();
+  showToast('تم حذف الطالب', '🗑️');
+}
+
+function downloadExcelTemplate() {
+  const wsData = [
+    ['ت', 'الاسم الرباعي', 'الجنس', 'الشعبة(المجموعة)', 'المرحلة الدراسية', 'نوع الدراسة', 'الدوام مع'],
+    [1, 'محمد علي حسن كريم', 'ذكر', 'A', 'الثانية', 'الصباحية', 'صباحي'],
+    [2, 'زهراء أحمد كاظم عبد', 'أنثى', 'B', 'الثالثة', 'المسائية', 'مسائي']
+  ];
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  XLSX.utils.book_append_sheet(wb, ws, 'الطلبة');
+  XLSX.writeFile(wb, 'قالب_استيراد_طلبة_قسم_المحاسبة.xlsx');
+}
+
+function handleExcelImport() {
+  const fileInput = document.getElementById('excelImportInput');
+  const mode = document.getElementById('excelImportMode').value;
+  if (!fileInput.files || !fileInput.files[0]) {
+    showToast('يرجى اختيار ملف Excel أولاً', '⚠️');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const imported = [];
+      let counter = Date.now();
+
+      workbook.SheetNames.forEach(sheetName => {
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet);
+        const inferredStage = sheetName.includes('الأولى') ? 'الأولى' :
+                              sheetName.includes('الثانية') ? 'الثانية' :
+                              sheetName.includes('الثالثة') ? 'الثالثة' :
+                              sheetName.includes('الرابعة') ? 'الرابعة' : 'الثانية';
+
+        rows.forEach(r => {
+          const name = String(r['الاسم الرباعي'] || r['الاسم'] || r['name'] || '').trim();
+          if (!name) return;
+          const gender = String(r['الجنس'] || r['gender'] || 'ذكر').trim();
+          const section = String(r['الشعبة(المجموعة)'] || r['الشعبة'] || r['section'] || 'A').trim().toUpperCase();
+          const stage = String(r['المرحلة الدراسية'] || r['المرحلة'] || inferredStage).replace('المرحلة ', '').trim();
+          const studyType = String(r['نوع الدراسة'] || 'الصباحية').trim();
+          const actualShift = String(r['الدوام مع'] || (studyType === 'المسائية' ? 'مسائي' : 'صباحي')).trim();
+
+          imported.push({
+            id: `STU-${counter++}`,
+            name, gender, studyType, stage, actualShift, section
+          });
+        });
+      });
+
+      if (imported.length === 0) {
+        showToast('لم يتم العثور على أسماء طلبة صالحة في الملف', '⚠️');
+        return;
+      }
+
+      if (mode === 'replace') {
+        students = imported;
+      } else {
+        const existingNames = new Set(students.map(s => s.name));
+        imported.forEach(imp => {
+          if (!existingNames.has(imp.name)) students.push(imp);
+        });
+      }
+
+      saveStudentsToStorage();
+      renderManageStudentsTable();
+      checkExistingSession();
+      showToast(`تم استيراد ${imported.length} طالباً بنجاح`, '📗');
+
+      await pushToCloud({
+        action: 'sync_all',
+        students: students,
+        reportRows: buildFullReportRows()
+      });
+    } catch (err) {
+      showToast('حدث خطأ أثناء قراءة ملف الإكسل', '❌');
+    }
+  };
+  reader.readAsArrayBuffer(fileInput.files[0]);
+}
+
+function downloadBackupJSON() {
+  const payload = { exportedAt: new Date().toISOString(), settings, students, lectures };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `نسخة_احتياطية_قسم_المحاسبة_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+}
+
+function restoreBackupJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (Array.isArray(data.students)) { students = data.students; saveStudentsToStorage(); }
+      if (Array.isArray(data.lectures)) { lectures = data.lectures; saveLecturesToStorage(); }
+      if (data.settings) { settings = { ...settings, ...data.settings }; saveSettingsToStorage(); }
+      checkExistingSession();
+      showToast('تمت استعادة النسخة الاحتياطية بنجاح', '✅');
+    } catch (err) {
+      showToast('ملف النسخة الاحتياطية غير صالح', '❌');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ==================== 12. الأدوات المساعدة ====================
+function openModal(title, htmlContent) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = htmlContent;
+  document.getElementById('detailModal').classList.remove('hidden');
+}
+
+function closeModal() {
+  document.getElementById('detailModal').classList.add('hidden');
+}
+
+let toastTimer = null;
+function showToast(msg, icon = '✅') {
+  const toast = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  document.getElementById('toastIcon').textContent = icon;
+  toast.classList.remove('translate-y-20', 'opacity-0');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.classList.add('translate-y-20', 'opacity-0');
+  }, 3500);
+}
+
+// ==================== التشغيل التلقائي عند فتح الصفحة ====================
+window.addEventListener('DOMContentLoaded', () => {
+  loadState();
+  initProfessorView();
+  syncFromCloud(false);
+});
+</script>
+</body>
+</html>
