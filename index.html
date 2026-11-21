@@ -248,7 +248,7 @@
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4 border-b border-slate-100 pb-3">
           <div>
             <h2 class="text-lg font-bold text-slate-800">📊 تقرير الغيابات والإنذارات الأكاديمية</h2>
-            <p class="text-xs text-slate-500 mt-0.5">تُحتسب النسب من أصل <strong id="displayCourseLectures" class="text-blue-700">15</strong> محاضرة خلال الكورس الدراسي</p>
+            <p class="text-xs text-slate-500 mt-0.5">تُحتسب الساعات وفق المعادلة: <strong class="text-blue-700"><span id="displayCourseLectures">15</span> أسبوع × <span id="displayLectureHours">3</span> ساعات = <span id="displayTotalHours">45</span> ساعة</strong> (إنذار أولي: محاضرتان | نهائي: 3 محاضرات | فصل: 4 محاضرات)</p>
           </div>
           <div class="flex flex-wrap gap-2">
             <button onclick="syncFromCloud(true)" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5">
@@ -325,9 +325,9 @@
                 <th class="py-3 px-3 text-center">الدوام الفعلي</th>
                 <th class="py-3 px-3 text-center">الشعبة</th>
                 <th class="py-3 px-3 text-center">الحضور</th>
-                <th class="py-3 px-3 text-center">الغياب</th>
-                <th class="py-3 px-3 text-center">الإجازات</th>
-                <th class="py-3 px-3 text-center">نسبة الغياب (من <span id="tableMaxLectures">15</span>)</th>
+                <th class="py-3 px-3 text-center">محاضرات الغياب</th>
+                <th class="py-3 px-3 text-center">ساعات الغياب</th>
+                <th class="py-3 px-3 text-center">النسبة (من <span id="tableMaxLectures">45</span> س)</th>
                 <th class="py-3 px-3 text-center">الموقف الأكاديمي</th>
                 <th class="py-3 px-3 text-center no-print">تفاصيل</th>
               </tr>
@@ -433,13 +433,21 @@
       <!-- ضبط معادلة الكورس وعتبات الإنذارات والفصل + الحماية -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
-          <h3 class="text-base font-bold text-slate-800 border-b border-slate-100 pb-2">⚖️ ضوابط الكورس ونسب الإنذار والفصل المعتمدة</h3>
+          <h3 class="text-base font-bold text-slate-800 border-b border-slate-100 pb-2">⚖️ ضوابط الساعات ونسب الإنذار والفصل المعتمدة</h3>
           
-          <div class="bg-blue-50/70 border border-blue-200 rounded-xl p-3">
-            <label class="block text-xs font-extrabold text-blue-900 mb-1">إجمالي عدد محاضرات الكورس للمادة الواحدة (المقام)</label>
-            <div class="flex items-center gap-3">
-              <input type="number" id="courseLecturesInput" value="15" min="1" max="60" class="w-28 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-sm font-extrabold text-center text-blue-900" />
-              <span class="text-xs text-blue-700">محاضرة خلال الكورس (تُحسب النسبة: <code>الغياب ÷ 15 × 100</code>)</span>
+          <div class="bg-blue-50/70 border border-blue-200 rounded-xl p-3 space-y-2">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-extrabold text-blue-900 mb-1">عدد أسابيع الكورس</label>
+                <input type="number" id="courseLecturesInput" value="15" min="1" max="60" oninput="updateHoursPreview()" class="w-full rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-sm font-extrabold text-center text-blue-900" />
+              </div>
+              <div>
+                <label class="block text-xs font-extrabold text-blue-900 mb-1">ساعات المحاضرة الواحدة</label>
+                <input type="number" id="lectureHoursInput" value="3" min="1" max="10" oninput="updateHoursPreview()" class="w-full rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-sm font-extrabold text-center text-blue-900" />
+              </div>
+            </div>
+            <div id="hoursFormulaPreview" class="text-[11px] font-bold text-blue-800 bg-white/80 rounded-lg px-3 py-2 border border-blue-100">
+              المجموع: 3 × 15 = 45 ساعة | 8% ≈ 4 ساعات (محاضرتان: إنذار أولي) | 10% ≈ 5 ساعات (3 محاضرات: إنذار نهائي) | 14% ≈ 7 ساعات (4 محاضرات: فصل)
             </div>
           </div>
 
@@ -663,99 +671,60 @@ let students = [];
 let lectures = [];
 let settings = {
   courseLectures: 15,
+  lectureHours: 3,
   s123Warn1: 8,
   s123Warn2: 10,
   s123Expel: 14,
   s4Warn1: 5,
   s4Warn2: 10,
   s4Expel: 15,
-  adminPin: '2026'
+  adminPin: '2026',
+  profPins: {}
 };
 
-let currentAttendanceMap = {};
+let currentRecords = {};
 let isAdminUnlocked = false;
-let pendingProtectedTab = null;
-let authenticatedProfessor = null;
+let pendingAdminTab = null;
+let authenticatedProf = null;
 
-// الرموز السرية الافتراضية للتدريسيين (4 أرقام لكل تدريسي لضمان الخصوصية)
-const DEFAULT_PROF_PINS = {
-  "منتصر عمران ناجي": "1101",
-  "ثامر ياس خضير": "1102",
-  "أمل محمد سلمان": "1103",
-  "أنمار عدنان خضير": "1104",
-  "حيدر علي جراد": "1105",
-  "حسام محمد علي مهدي": "1106",
-  "حسين عمران ناجي": "1107",
-  "محمد علي جعفر": "1108",
-  "صلاح مهدي الكواز": "1109",
-  "صادق هادي محي": "1110",
-  "أزهر صبحي عبد الحسين": "1111",
-  "محمد حسين علي": "1112",
-  "علي محمد شنان": "1113",
-  "محمد وفي عباس": "1114",
-  "أحمد ناصر عباس": "1115",
-  "عبد الرسول عبد العباس": "1116",
-  "علي محمد حسن محمد جواد": "1117",
-  "لمياء علي ابراهيم": "1118",
-  "ميساء سعد حبي": "1119",
-  "أحمد نعمة عبد": "1120",
-  "حسن عبد الكريم": "1121",
-  "جاسم عيدان براك": "1122",
-  "جنان عبد خاجي": "1123",
-  "حسين عبد علي": "1124",
-  "محمد ديوان شنيور": "1125",
-  "مرتضى حسن خليف": "1126",
-  "بشرى جابر محمد جواد": "1127",
-  "مشتاق طالب عبد الامير": "1128",
-  "شهد عودة عبد العباس": "1129",
-  "أحمد نجاح هادي": "1130",
-  "مؤيد مهدي صالح": "1131",
-  "محمد جبار فشاخ": "1132",
-  "أيمن محمد علي": "1133",
-  "علي عبد الحسن": "1134",
-  "هالة كريم رضا": "1135",
-  "ليلى محسن الحكيم": "1136",
-  "فرقد محمد بكر": "1137",
-  "فاروق خضير عباس": "1138"
-};
+function generateDefaultProfPins() {
+  const pins = {};
+  const profSet = new Set();
+  CURRICULUM.forEach(c => c.professors.forEach(p => profSet.add(p)));
+  let code = 1101;
+  Array.from(profSet).forEach(p => {
+    pins[p] = String(code++);
+  });
+  return pins;
+}
 
 function buildDefaultStudentsList() {
   const list = [];
   let counter = 1;
-  Object.keys(RAW_STUDENTS_GROUPED).forEach(key => {
+  Object.entries(RAW_STUDENTS_GROUPED).forEach(([key, arr]) => {
     const [stage, actualShift, section] = key.split('|');
-    RAW_STUDENTS_GROUPED[key].forEach(arr => {
+    arr.forEach(([name, gender, studyType]) => {
       list.push({
-        id: `STU-${counter++}`,
-        name: arr[0],
-        gender: arr[1],
-        studyType: arr[2],
-        stage: stage,
-        actualShift: actualShift,
-        section: section
+        id: `STU-${String(counter++).padStart(4, '0')}`,
+        name,
+        gender,
+        studyType,
+        stage,
+        actualShift,
+        section
       });
     });
   });
   return list;
 }
 
-function getFirebaseConfig() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEYS.FB_CONFIG);
-    if (saved) return JSON.parse(saved);
-  } catch (e) {}
-  return DEFAULT_FIREBASE_CONFIG;
-}
-
-function saveStudentsToStorage() { localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students)); }
-function saveLecturesToStorage() { localStorage.setItem(STORAGE_KEYS.LECTURES, JSON.stringify(lectures)); }
-function saveSettingsToStorage() { localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings)); }
-
 function loadState() {
   try {
     const savedStudents = localStorage.getItem(STORAGE_KEYS.STUDENTS);
     students = savedStudents ? JSON.parse(savedStudents) : buildDefaultStudentsList();
-    if (!Array.isArray(students) || students.length === 0) students = buildDefaultStudentsList();
+    if (!Array.isArray(students) || students.length === 0) {
+      students = buildDefaultStudentsList();
+    }
   } catch (e) {
     students = buildDefaultStudentsList();
   }
@@ -763,53 +732,77 @@ function loadState() {
   try {
     const savedLectures = localStorage.getItem(STORAGE_KEYS.LECTURES);
     lectures = savedLectures ? JSON.parse(savedLectures) : [];
+    if (!Array.isArray(lectures)) lectures = [];
   } catch (e) {
     lectures = [];
   }
 
+  const defaultPins = generateDefaultProfPins();
   try {
     const savedSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-    if (savedSettings) settings = { ...settings, ...JSON.parse(savedSettings) };
+    if (savedSettings) {
+      const parsed = JSON.parse(savedSettings);
+      settings = { ...settings, ...parsed };
+    }
   } catch (e) {}
-
-  if (!settings.profPins) {
-    settings.profPins = { ...DEFAULT_PROF_PINS };
-  } else {
-    settings.profPins = { ...DEFAULT_PROF_PINS, ...settings.profPins };
-  }
+  settings.profPins = { ...defaultPins, ...(settings.profPins || {}) };
 }
 
-// ==================== 5. نظام الحماية بالرمز السري ====================
+function saveStudentsToStorage() {
+  try { localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students)); } catch (e) {}
+}
+
+function saveLecturesToStorage() {
+  try { localStorage.setItem(STORAGE_KEYS.LECTURES, JSON.stringify(lectures)); } catch (e) {}
+}
+
+function saveSettingsToStorage() {
+  try { localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings)); } catch (e) {}
+}
+
+// ==================== 5. الحماية بالرمز السري (PIN) والتنقل ====================
 function requestProtectedTab(tabName) {
-  if (isAdminUnlocked) { switchTab(tabName); return; }
-  pendingProtectedTab = tabName;
-  const label = tabName === 'chair' ? 'لوحة رئيس القسم' : 'إدارة البيانات والإعدادات';
-  openModal(`🔒 الدخول إلى ${label}`, `
-    <div class="space-y-3">
-      <p class="text-xs text-slate-600">هذه الواجهة مخصصة لرئيس ومقرر القسم فقط. يرجى إدخال الرمز السري للمتابعة:</p>
-      <input type="password" id="pinVerifyInput" onkeydown="if(event.key==='Enter') verifyAdminPin()" placeholder="أدخل الرمز السري (PIN)" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-center text-base font-extrabold tracking-widest focus:ring-2 focus:ring-blue-500 outline-none" autofocus />
-      <p id="pinErrorMsg" class="hidden text-xs text-rose-600 font-bold text-center">❌ الرمز السري غير صحيح، حاول مرة أخرى.</p>
-      <button onclick="verifyAdminPin()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-sm shadow transition">🔓 فتح الواجهة</button>
+  if (isAdminUnlocked) {
+    switchTab(tabName);
+    return;
+  }
+  pendingAdminTab = tabName;
+  openModal('🔒 الدخول إلى لوحة رئيس القسم / الإدارة', `
+    <p class="text-xs text-slate-600">يرجى إدخال الرمز السري (PIN) الخاص برئاسة القسم للوصول إلى هذه اللوحة:</p>
+    <input type="password" id="adminPinVerifyInput" maxlength="12" placeholder="أدخل الرمز السري..." onkeydown="if(event.key==='Enter') verifyAdminPin()" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-center text-base font-extrabold tracking-widest outline-none focus:ring-2 focus:ring-blue-500" />
+    <div class="flex justify-end gap-2 pt-2">
+      <button onclick="verifyAdminPin()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2 rounded-xl text-xs shadow">دخول</button>
     </div>
   `);
-  setTimeout(() => { const inp = document.getElementById('pinVerifyInput'); if (inp) inp.focus(); }, 100);
+  setTimeout(() => {
+    const inp = document.getElementById('adminPinVerifyInput');
+    if (inp) inp.focus();
+  }, 100);
 }
 
 function verifyAdminPin() {
-  const inp = document.getElementById('pinVerifyInput');
-  if (!inp) return;
-  if (inp.value.trim() === String(settings.adminPin || '2026')) {
+  const inp = document.getElementById('adminPinVerifyInput');
+  const val = inp ? inp.value.trim() : '';
+  if (val === String(settings.adminPin || '2026')) {
     isAdminUnlocked = true;
+    closeModal();
     document.getElementById('lock-icon-chair').textContent = '🔓';
     document.getElementById('lock-icon-settings').textContent = '🔓';
     document.getElementById('lockSessionBtn').classList.remove('hidden');
-    closeModal();
-    if (pendingProtectedTab) { switchTab(pendingProtectedTab); pendingProtectedTab = null; }
-    showToast('تم فتح صلاحيات الإدارة بنجاح', '🔓');
+    if (pendingAdminTab === 'PROF_ALL') {
+      authenticatedProf = 'ALL';
+      const profSel = document.getElementById('profSelect');
+      profSel.value = 'ALL';
+      profSel.disabled = true;
+      document.getElementById('switchProfBtn').classList.remove('hidden');
+      populateSubjectsForProfessor('ALL');
+      showToast('تم تفعيل وضع رئيس القسم (جميع المواد)', '🔓');
+    } else if (pendingAdminTab) {
+      switchTab(pendingAdminTab);
+    }
+    pendingAdminTab = null;
   } else {
-    document.getElementById('pinErrorMsg').classList.remove('hidden');
-    inp.value = '';
-    inp.focus();
+    showToast('الرمز السري غير صحيح', '❌');
   }
 }
 
@@ -818,380 +811,352 @@ function lockAdminSession() {
   document.getElementById('lock-icon-chair').textContent = '🔒';
   document.getElementById('lock-icon-settings').textContent = '🔒';
   document.getElementById('lockSessionBtn').classList.add('hidden');
+  if (authenticatedProf === 'ALL') {
+    logoutProfessor();
+  }
   switchTab('prof');
-  showToast('تم قفل لوحة الإدارة والعودة لواجهة الأستاذ', '🔒');
+  showToast('تم قفل لوحة الإدارة بنجاح', '🔒');
 }
 
 function updateAdminPin() {
-  const newPin = document.getElementById('newAdminPinInput').value.trim();
-  if (newPin.length < 4) { showToast('يجب أن يتكون الرمز السري من 4 أرقام أو أحرف على الأقل', '⚠️'); return; }
+  const newPin = (document.getElementById('newAdminPinInput').value || '').trim();
+  if (!newPin || newPin.length < 4) {
+    showToast('يرجى إدخال رمز سري من 4 أرقام/أحرف على الأقل', '⚠️');
+    return;
+  }
   settings.adminPin = newPin;
   saveSettingsToStorage();
   document.getElementById('newAdminPinInput').value = '';
-  showToast('تم تحديث الرمز السري بنجاح', '🔐');
+  showToast('تم تحديث الرمز السري للوحة رئيس القسم بنجاح', '🔐');
 }
 
-function switchTab(tab) {
+function switchTab(tabName) {
   ['prof', 'chair', 'settings'].forEach(t => {
     const view = document.getElementById(`view-${t}`);
     const btn = document.getElementById(`tab-${t}`);
-    if (t === tab) {
-      view.classList.remove('hidden');
-      btn.classList.add('bg-blue-600', 'text-white', 'shadow');
-      btn.classList.remove('text-slate-300');
-    } else {
-      view.classList.add('hidden');
-      btn.classList.remove('bg-blue-600', 'text-white', 'shadow');
-      btn.classList.add('text-slate-300');
+    if (view) view.classList.toggle('hidden', t !== tabName);
+    if (btn) {
+      if (t === tabName) {
+        btn.className = 'px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-bold transition bg-blue-600 text-white shadow';
+      } else {
+        btn.className = 'px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-bold transition text-slate-300 hover:text-white flex items-center gap-1';
+      }
     }
   });
 
-  if (tab === 'chair') {
+  if (tabName === 'chair') {
     populateChairSubjects();
     renderChairReport();
-    syncFromCloud(false);
-  } else if (tab === 'settings') {
+  } else if (tabName === 'settings') {
     loadSettingsUI();
     renderManageStudentsTable();
   }
 }
 
-// ==================== 6. واجهة الأستاذ التدريسي وصلاحيات القفل ====================
+// ==================== 6. واجهة الأستاذ التدريسي وصلاحيات المواد ====================
 function initProfessorView() {
-  const profSelect = document.getElementById('profSelect');
+  const profSel = document.getElementById('profSelect');
   const profSet = new Set();
   CURRICULUM.forEach(c => c.professors.forEach(p => profSet.add(p)));
-  Array.from(profSet).sort((a, b) => a.localeCompare(b, 'ar')).forEach(p => {
+  const sortedProfs = Array.from(profSet).sort((a, b) => a.localeCompare(b, 'ar'));
+
+  sortedProfs.forEach(p => {
     const opt = document.createElement('option');
     opt.value = p;
-    opt.textContent = `👨‍🏫 ${p}`;
-    profSelect.appendChild(opt);
+    opt.textContent = p;
+    profSel.appendChild(opt);
   });
 
   const dateInput = document.getElementById('lectureDate');
-  if (!dateInput.value) dateInput.value = new Date().toISOString().split('T')[0];
-
-  const urlParams = new URLSearchParams(window.location.search);
-  const urlProf = urlParams.get('prof');
-  const savedAuthProf = sessionStorage.getItem('acc_auth_prof');
-
-  if (urlProf && profSet.has(urlProf)) {
-    profSelect.value = urlProf;
-    onProfessorSelectAttempt();
-  } else if (savedAuthProf && profSet.has(savedAuthProf)) {
-    authenticatedProfessor = savedAuthProf;
-    applyProfessorLockUI();
-  } else {
-    lockProfessorFormState(true);
+  if (dateInput && !dateInput.value) {
+    dateInput.value = new Date().toISOString().slice(0, 10);
   }
-}
 
-function lockProfessorFormState(locked) {
-  const subjectSelect = document.getElementById('subjectSelect');
-  const shiftSelect = document.getElementById('shiftSelect');
-  const sectionSelect = document.getElementById('sectionSelect');
-  const saveBtn = document.getElementById('saveBtn');
-
-  subjectSelect.disabled = locked;
-  shiftSelect.disabled = locked;
-  sectionSelect.disabled = locked;
-  saveBtn.disabled = locked;
-
-  if (locked) {
-    subjectSelect.innerHTML = '<option value="">🔒 يرجى اختيار اسمك وإدخال الرمز السري أولاً</option>';
-    document.getElementById('attendanceTableBody').innerHTML = `
-      <tr>
-        <td colspan="5" class="py-12 text-center">
-          <div class="inline-block bg-blue-50 border border-blue-200 rounded-2xl p-6 max-w-md">
-            <div class="text-3xl mb-2">🔐</div>
-            <div class="font-extrabold text-slate-800 text-sm mb-1">بوابة تسجيل الحضور المحمية للتدريسيين</div>
-            <p class="text-xs text-slate-600">يرجى اختيار اسمك من قائمة <strong>(اسم الأستاذ التدريسي)</strong> أعلاه وإدخال الرمز السري الخاص بك لعرض موادك وشعبك الدراسية فقط.</p>
-          </div>
-        </td>
-      </tr>`;
-    document.getElementById('countTotal').textContent = '0';
-    document.getElementById('countPresent').textContent = '0';
-    document.getElementById('countAbsent').textContent = '0';
-    document.getElementById('countExcused').textContent = '0';
-    document.getElementById('sectionHistoryList').innerHTML = '';
+  const params = new URLSearchParams(window.location.search);
+  const preProf = params.get('prof');
+  if (preProf && profSet.has(preProf)) {
+    profSel.value = preProf;
+    onProfessorSelectAttempt();
+  } else {
+    populateSubjectsForProfessor(null);
   }
 }
 
 function onProfessorSelectAttempt() {
-  const profSelect = document.getElementById('profSelect');
-  const chosen = profSelect.value;
-
+  const profSel = document.getElementById('profSelect');
+  const chosen = profSel.value;
   if (!chosen) {
-    authenticatedProfessor = null;
-    sessionStorage.removeItem('acc_auth_prof');
-    lockProfessorFormState(true);
+    authenticatedProf = null;
+    populateSubjectsForProfessor(null);
     return;
   }
 
   if (chosen === 'ALL') {
     if (isAdminUnlocked) {
-      authenticatedProfessor = 'ALL';
-      applyProfessorLockUI();
-      return;
+      authenticatedProf = 'ALL';
+      profSel.disabled = true;
+      document.getElementById('switchProfBtn').classList.remove('hidden');
+      populateSubjectsForProfessor('ALL');
+    } else {
+      profSel.value = '';
+      pendingAdminTab = 'PROF_ALL';
+      requestProtectedTab('PROF_ALL');
     }
-    openModal('🔒 الدخول إلى وضع رئيس القسم (جميع المواد)', `
-      <div class="space-y-3">
-        <p class="text-xs text-slate-600">عرض جميع المواد مخصص لرئيس القسم فقط. أدخل رمز رئيس القسم (PIN):</p>
-        <input type="password" id="profPinInput" onkeydown="if(event.key==='Enter') verifyProfessorPin('ALL')" placeholder="رمز رئيس القسم" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-center text-base font-extrabold tracking-widest outline-none focus:ring-2 focus:ring-blue-500" autofocus />
-        <p id="profPinError" class="hidden text-xs text-rose-600 font-bold text-center">❌ الرمز السري غير صحيح.</p>
-        <button onclick="verifyProfessorPin('ALL')" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-sm">🔓 فتح جميع المواد</button>
-      </div>
-    `);
-    setTimeout(() => { const el = document.getElementById('profPinInput'); if (el) el.focus(); }, 100);
     return;
   }
 
-  if (isAdminUnlocked || authenticatedProfessor === chosen) {
-    authenticatedProfessor = chosen;
-    applyProfessorLockUI();
-    return;
-  }
-
-  openModal(`🔐 التحقق من هوية التدريسي`, `
-    <div class="space-y-3">
-      <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs font-bold text-blue-900">
-        الأستاذ التدريسي: <span class="underline">${chosen}</span>
-      </div>
-      <p class="text-xs text-slate-600">أدخل الرمز السري الخاص بك لفتح موادك الدراسية فقط:</p>
-      <input type="password" id="profPinInput" onkeydown="if(event.key==='Enter') verifyProfessorPin('${chosen}')" placeholder="أدخل الرمز السري (PIN)" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-center text-base font-extrabold tracking-widest outline-none focus:ring-2 focus:ring-blue-500" autofocus />
-      <p id="profPinError" class="hidden text-xs text-rose-600 font-bold text-center">❌ الرمز السري غير صحيح، تأكد من الرمز المخصص لك.</p>
-      <button onclick="verifyProfessorPin('${chosen}')" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-sm shadow">🔓 دخول إلى موادي</button>
+  profSel.value = '';
+  openModal(`🔐 تسجيل دخول الأستاذ: ${chosen}`, `
+    <p class="text-xs text-slate-600">أدخل الرمز السري (PIN) الخاص بك لفتح المواد الدراسية المخصصة لك فقط:</p>
+    <input type="password" id="profPinVerifyInput" maxlength="12" placeholder="الرمز السري للأستاذ..." onkeydown="if(event.key==='Enter') verifyProfessorPin('${chosen.replace(/'/g, "\\'")}')" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-center text-base font-extrabold tracking-widest outline-none focus:ring-2 focus:ring-blue-500" />
+    <div class="flex justify-end gap-2 pt-2">
+      <button onclick="verifyProfessorPin('${chosen.replace(/'/g, "\\'")}')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2 rounded-xl text-xs shadow">دخول إلى موادي</button>
     </div>
   `);
-  setTimeout(() => { const el = document.getElementById('profPinInput'); if (el) el.focus(); }, 100);
+  setTimeout(() => {
+    const inp = document.getElementById('profPinVerifyInput');
+    if (inp) inp.focus();
+  }, 100);
 }
 
 function verifyProfessorPin(profName) {
-  const inp = document.getElementById('profPinInput');
-  if (!inp) return;
-  const entered = inp.value.trim();
-  const expected = profName === 'ALL'
-    ? String(settings.adminPin || '2026')
-    : String((settings.profPins && settings.profPins[profName]) || '1234');
-
-  if (entered === expected || entered === String(settings.adminPin || '2026')) {
-    authenticatedProfessor = profName;
-    if (profName === 'ALL') {
-      isAdminUnlocked = true;
-      document.getElementById('lock-icon-chair').textContent = '🔓';
-      document.getElementById('lock-icon-settings').textContent = '🔓';
-      document.getElementById('lockSessionBtn').classList.remove('hidden');
-    } else {
-      sessionStorage.setItem('acc_auth_prof', profName);
-    }
+  const inp = document.getElementById('profPinVerifyInput');
+  const entered = inp ? inp.value.trim() : '';
+  const expected = (settings.profPins && settings.profPins[profName]) || '1234';
+  if (entered === String(expected) || entered === String(settings.adminPin || '2026')) {
+    authenticatedProf = profName;
     closeModal();
-    applyProfessorLockUI();
-    showToast(`أهلاً بك أ. ${profName === 'ALL' ? 'رئيس القسم' : profName}`, '✅');
+    const profSel = document.getElementById('profSelect');
+    profSel.value = profName;
+    profSel.disabled = true;
+    document.getElementById('switchProfBtn').classList.remove('hidden');
+    populateSubjectsForProfessor(profName);
+    showToast(`أهلاً بك أ. ${profName}`, '👨‍🏫');
   } else {
-    document.getElementById('profPinError').classList.remove('hidden');
-    inp.value = '';
-    inp.focus();
+    showToast('الرمز السري غير صحيح', '❌');
   }
-}
-
-function applyProfessorLockUI() {
-  const profSelect = document.getElementById('profSelect');
-  const switchBtn = document.getElementById('switchProfBtn');
-
-  if (!authenticatedProfessor) {
-    profSelect.disabled = false;
-    switchBtn.classList.add('hidden');
-    lockProfessorFormState(true);
-    return;
-  }
-
-  profSelect.value = authenticatedProfessor;
-  profSelect.disabled = (authenticatedProfessor !== 'ALL' && !isAdminUnlocked);
-  switchBtn.classList.remove('hidden');
-
-  lockProfessorFormState(false);
-  populateProfessorSubjects();
 }
 
 function logoutProfessor() {
-  authenticatedProfessor = null;
-  sessionStorage.removeItem('acc_auth_prof');
-  const profSelect = document.getElementById('profSelect');
-  profSelect.disabled = false;
-  profSelect.value = '';
+  authenticatedProf = null;
+  const profSel = document.getElementById('profSelect');
+  profSel.disabled = false;
+  profSel.value = '';
   document.getElementById('switchProfBtn').classList.add('hidden');
-  lockProfessorFormState(true);
-  showToast('تم تسجيل الخروج من واجهة الأستاذ', '🔒');
+  populateSubjectsForProfessor(null);
 }
 
-function populateProfessorSubjects() {
-  const selectedProf = authenticatedProfessor || document.getElementById('profSelect').value;
-  const subjectSelect = document.getElementById('subjectSelect');
-  subjectSelect.innerHTML = '';
-  if (!selectedProf) return;
+function populateSubjectsForProfessor(profName) {
+  const subSel = document.getElementById('subjectSelect');
+  subSel.innerHTML = '';
 
-  const filtered = selectedProf === 'ALL' ? CURRICULUM : CURRICULUM.filter(c => c.professors.includes(selectedProf));
-  filtered.forEach(c => {
+  if (!profName) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '-- يرجى اختيار اسمك وإدخال الرمز السري أولاً --';
+    subSel.appendChild(opt);
+    updateSectionsDropdown();
+    checkExistingSession();
+    return;
+  }
+
+  const allowed = profName === 'ALL'
+    ? CURRICULUM
+    : CURRICULUM.filter(c => c.professors.includes(profName));
+
+  allowed.forEach(c => {
     const opt = document.createElement('option');
     opt.value = c.id;
-    opt.textContent = `${c.subject} — (المرحلة ${c.stage})`;
-    subjectSelect.appendChild(opt);
+    opt.textContent = `${c.subject} — المرحلة ${c.stage}`;
+    subSel.appendChild(opt);
   });
+
   onSubjectChange();
 }
 
-function onSubjectChange() { onShiftOrSectionChange(); }
-
-function onShiftOrSectionChange() {
-  const subId = document.getElementById('subjectSelect').value;
-  const course = CURRICULUM.find(c => c.id === subId) || CURRICULUM[0];
-  const shift = document.getElementById('shiftSelect').value;
-  const sectionSelect = document.getElementById('sectionSelect');
-  const prevSection = sectionSelect.value;
-
-  const availableSections = new Set(['A', 'B']);
-  if (course.stage === 'الثالثة' || course.stage === 'الرابعة') availableSections.add('C');
-  students.forEach(s => { if (s.stage === course.stage && s.actualShift === shift) availableSections.add(s.section); });
-
-  sectionSelect.innerHTML = '';
-  Array.from(availableSections).sort().forEach(sec => {
-    const opt = document.createElement('option');
-    opt.value = sec; opt.textContent = `شعبة ${sec}`;
-    sectionSelect.appendChild(opt);
-  });
-  if (prevSection && availableSections.has(prevSection)) sectionSelect.value = prevSection;
+function onSubjectChange() {
+  updateSectionsDropdown();
   checkExistingSession();
 }
 
-function getFilteredStudentsForSession() {
+function onShiftOrSectionChange() {
+  updateSectionsDropdown(true);
+  checkExistingSession();
+}
+
+function updateSectionsDropdown(preserveCurrent = false) {
   const subId = document.getElementById('subjectSelect').value;
-  const course = CURRICULUM.find(c => c.id === subId) || CURRICULUM[0];
+  const shift = document.getElementById('shiftSelect').value;
+  const secSel = document.getElementById('sectionSelect');
+  const prevSec = secSel.value;
+
+  const course = CURRICULUM.find(c => c.id === subId);
+  const stage = course ? course.stage : 'الثانية';
+
+  const secs = new Set();
+  students.forEach(s => {
+    if (s.stage === stage && s.actualShift === shift) secs.add(s.section);
+  });
+  const sortedSecs = secs.size > 0 ? Array.from(secs).sort() : ['A', 'B'];
+
+  secSel.innerHTML = '';
+  sortedSecs.forEach(sec => {
+    const opt = document.createElement('option');
+    opt.value = sec;
+    opt.textContent = `شعبة ${sec}`;
+    secSel.appendChild(opt);
+  });
+
+  if (preserveCurrent && sortedSecs.includes(prevSec)) {
+    secSel.value = prevSec;
+  }
+}
+
+function getFilteredSectionStudents() {
+  if (!authenticatedProf) return [];
+  const subId = document.getElementById('subjectSelect').value;
+  const course = CURRICULUM.find(c => c.id === subId);
+  if (!course) return [];
   const shift = document.getElementById('shiftSelect').value;
   const section = document.getElementById('sectionSelect').value;
-  return students
-    .filter(s => s.stage === course.stage && s.actualShift === shift && s.section === section)
-    .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+  return students.filter(s => s.stage === course.stage && s.actualShift === shift && s.section === section);
 }
 
 function checkExistingSession() {
   const subId = document.getElementById('subjectSelect').value;
+  const course = CURRICULUM.find(c => c.id === subId);
   const shift = document.getElementById('shiftSelect').value;
   const section = document.getElementById('sectionSelect').value;
   const date = document.getElementById('lectureDate').value;
-  const sessionId = `${subId}|${shift}|${section}|${date}`;
 
-  const existing = lectures.find(l => l.id === sessionId || l.id === `${subId}_${shift}_${section}_${date}`);
-  const groupStudents = getFilteredStudentsForSession();
-  currentAttendanceMap = {};
+  const sectionStudents = getFilteredSectionStudents();
+  currentRecords = {};
 
+  const existing = (course && authenticatedProf)
+    ? lectures.find(l => l.subjectId === subId && l.stage === course.stage && l.actualShift === shift && l.section === section && l.date === date)
+    : null;
+
+  const banner = document.getElementById('existingBanner');
   if (existing) {
-    document.getElementById('existingBanner').classList.remove('hidden');
-    document.getElementById('existingLastUpdated').textContent = existing.updatedAt ? `آخر تحديث: ${existing.updatedAt.slice(0, 16).replace('T', ' ')}` : '';
+    banner.classList.remove('hidden');
+    document.getElementById('existingLastUpdated').textContent = `آخر تحديث: ${existing.updatedAt || existing.date}`;
     document.getElementById('lectureTopic').value = existing.topic || '';
-    groupStudents.forEach(s => {
-      currentAttendanceMap[s.id] = (existing.records && existing.records[s.id]) ? existing.records[s.id] : 'P';
+    sectionStudents.forEach(s => {
+      currentRecords[s.id] = (existing.records && existing.records[s.id]) ? existing.records[s.id] : 'P';
     });
   } else {
-    document.getElementById('existingBanner').classList.add('hidden');
-    document.getElementById('lectureTopic').value = '';
-    groupStudents.forEach(s => { currentAttendanceMap[s.id] = 'P'; });
+    banner.classList.add('hidden');
+    sectionStudents.forEach(s => {
+      currentRecords[s.id] = 'P';
+    });
   }
 
   renderAttendanceList();
   renderSectionHistory();
 }
 
+function renderAttendanceList() {
+  const tbody = document.getElementById('attendanceTableBody');
+  const sectionStudents = getFilteredSectionStudents();
+  const query = (document.getElementById('studentSearchInput').value || '').trim();
+
+  if (!authenticatedProf) {
+    tbody.innerHTML = `<tr><td colspan="5" class="py-10 text-center text-slate-500 font-bold">🔒 يرجى اختيار اسمك وإدخال الرمز السري من الأعلى لعرض الطلبة وتسجيل الحضور</td></tr>`;
+    updateCounters([]);
+    return;
+  }
+
+  const displayed = query ? sectionStudents.filter(s => s.name.includes(query)) : sectionStudents;
+
+  if (displayed.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-400 font-bold">لا يوجد طلبة مسجلون في هذه الشعبة</td></tr>`;
+  } else {
+    tbody.innerHTML = displayed.map((s, idx) => {
+      const st = currentRecords[s.id] || 'P';
+      return `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="py-3 px-4 text-center font-bold text-slate-400">${idx + 1}</td>
+          <td class="py-3 px-4 font-bold text-slate-800">${s.name}</td>
+          <td class="py-3 px-3 hidden sm:table-cell text-center text-xs text-slate-500">${s.gender}</td>
+          <td class="py-3 px-3 hidden md:table-cell text-center text-xs">
+            <span class="px-2 py-0.5 rounded-full font-semibold ${s.studyType === 'الصباحية' ? 'bg-sky-50 text-sky-700' : 'bg-purple-50 text-purple-700'}">${s.studyType}</span>
+          </td>
+          <td class="py-3 px-4 text-center">
+            <div class="inline-flex rounded-xl bg-slate-100 p-1 gap-1">
+              <button onclick="setStudentStatus('${s.id}', 'P')" class="status-btn px-3 py-1.5 rounded-lg text-xs font-extrabold ${st === 'P' ? 'bg-emerald-600 text-white shadow' : 'text-slate-600 hover:bg-white'}">حاضر</button>
+              <button onclick="setStudentStatus('${s.id}', 'A')" class="status-btn px-3 py-1.5 rounded-lg text-xs font-extrabold ${st === 'A' ? 'bg-rose-600 text-white shadow' : 'text-slate-600 hover:bg-white'}">غائب</button>
+              <button onclick="setStudentStatus('${s.id}', 'E')" class="status-btn px-3 py-1.5 rounded-lg text-xs font-extrabold ${st === 'E' ? 'bg-amber-500 text-white shadow' : 'text-slate-600 hover:bg-white'}">مجاز</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  updateCounters(sectionStudents);
+}
+
 function setStudentStatus(studentId, status) {
-  currentAttendanceMap[studentId] = status;
+  currentRecords[studentId] = status;
   renderAttendanceList();
 }
 
 function markAllAs(status) {
-  Object.keys(currentAttendanceMap).forEach(id => { currentAttendanceMap[id] = status; });
+  if (!authenticatedProf) { showToast('يرجى تسجيل الدخول كأستاذ أولاً', '⚠️'); return; }
+  const sectionStudents = getFilteredSectionStudents();
+  sectionStudents.forEach(s => { currentRecords[s.id] = status; });
   renderAttendanceList();
 }
 
-function renderAttendanceList() {
-  const tbody = document.getElementById('attendanceTableBody');
-  const query = (document.getElementById('studentSearchInput').value || '').trim();
-  const groupStudents = getFilteredStudentsForSession();
-
-  let present = 0, absent = 0, excused = 0;
-  groupStudents.forEach(s => {
-    const st = currentAttendanceMap[s.id] || 'P';
-    if (st === 'P') present++; else if (st === 'A') absent++; else if (st === 'E') excused++;
+function updateCounters(sectionStudents) {
+  let p = 0, a = 0, e = 0;
+  sectionStudents.forEach(s => {
+    const st = currentRecords[s.id] || 'P';
+    if (st === 'P') p++;
+    else if (st === 'A') a++;
+    else if (st === 'E') e++;
   });
-
-  document.getElementById('countTotal').textContent = groupStudents.length;
-  document.getElementById('countPresent').textContent = present;
-  document.getElementById('countAbsent').textContent = absent;
-  document.getElementById('countExcused').textContent = excused;
-
-  const visibleStudents = query ? groupStudents.filter(s => s.name.includes(query)) : groupStudents;
-  if (visibleStudents.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-400 font-bold">لا يوجد طلبة مطابقون في هذه الشعبة</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = visibleStudents.map((s, idx) => {
-    const st = currentAttendanceMap[s.id] || 'P';
-    const isTransferred = (s.studyType === 'المسائية' && s.actualShift === 'صباحي') || (s.studyType === 'الصباحية' && s.actualShift === 'مسائي');
-    const rowBg = st === 'A' ? 'bg-rose-50/60' : (st === 'E' ? 'bg-amber-50/60' : 'hover:bg-slate-50');
-    return `
-      <tr class="${rowBg} transition">
-        <td class="py-2.5 px-4 text-center font-bold text-slate-500">${idx + 1}</td>
-        <td class="py-2.5 px-4 font-bold text-slate-800">
-          ${s.name}
-          ${isTransferred ? `<span class="mr-1.5 text-[10px] bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-bold">دوام مشترك</span>` : ''}
-        </td>
-        <td class="py-2.5 px-3 hidden sm:table-cell text-center text-xs text-slate-600">${s.gender}</td>
-        <td class="py-2.5 px-3 hidden md:table-cell text-center text-xs">
-          <span class="px-2 py-0.5 rounded-md ${s.studyType === 'الصباحية' ? 'bg-sky-50 text-sky-700' : 'bg-purple-50 text-purple-700'} font-semibold">${s.studyType}</span>
-        </td>
-        <td class="py-2.5 px-4 text-center">
-          <div class="inline-flex rounded-xl bg-slate-100 p-1 gap-1">
-            <button onclick="setStudentStatus('${s.id}', 'P')" class="status-btn px-3 py-1.5 rounded-lg text-xs font-extrabold ${st === 'P' ? 'bg-emerald-600 text-white shadow' : 'text-slate-600 hover:bg-white'}">✓ حاضر</button>
-            <button onclick="setStudentStatus('${s.id}', 'A')" class="status-btn px-3 py-1.5 rounded-lg text-xs font-extrabold ${st === 'A' ? 'bg-rose-600 text-white shadow' : 'text-slate-600 hover:bg-white'}">✕ غائب</button>
-            <button onclick="setStudentStatus('${s.id}', 'E')" class="status-btn px-3 py-1.5 rounded-lg text-xs font-extrabold ${st === 'E' ? 'bg-amber-500 text-white shadow' : 'text-slate-600 hover:bg-white'}">📄 مجاز</button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join('');
+  document.getElementById('countTotal').textContent = sectionStudents.length;
+  document.getElementById('countPresent').textContent = p;
+  document.getElementById('countAbsent').textContent = a;
+  document.getElementById('countExcused').textContent = e;
 }
 
 function renderSectionHistory() {
+  const container = document.getElementById('sectionHistoryList');
+  if (!authenticatedProf) {
+    container.innerHTML = `<p class="text-xs text-slate-400 col-span-full">سجل الدخول لعرض المحاضرات السابقة</p>`;
+    return;
+  }
   const subId = document.getElementById('subjectSelect').value;
+  const course = CURRICULUM.find(c => c.id === subId);
   const shift = document.getElementById('shiftSelect').value;
   const section = document.getElementById('sectionSelect').value;
-  const container = document.getElementById('sectionHistoryList');
+  if (!course) return;
 
-  const history = lectures
-    .filter(l => l.subjectId === subId && l.actualShift === shift && l.section === section)
+  const list = lectures
+    .filter(l => l.subjectId === subId && l.stage === course.stage && l.actualShift === shift && l.section === section)
     .sort((a, b) => b.date.localeCompare(a.date));
 
-  if (history.length === 0) {
-    container.innerHTML = `<div class="col-span-full text-xs text-slate-400 py-2">لم تُسجل محاضرات سابقة لهذه الشعبة بعد.</div>`;
+  if (list.length === 0) {
+    container.innerHTML = `<p class="text-xs text-slate-400 col-span-full">لا توجد محاضرات مسجلة سابقة لهذه المادة والشعبة.</p>`;
     return;
   }
 
-  container.innerHTML = history.map(l => {
+  container.innerHTML = list.map(l => {
     const vals = Object.values(l.records || {});
     const p = vals.filter(v => v === 'P').length;
     const a = vals.filter(v => v === 'A').length;
-    const e = vals.filter(v => v === 'E').length;
     return `
-      <div onclick="loadLectureForEdit('${l.id}')" class="cursor-pointer border border-slate-200 hover:border-blue-400 rounded-xl p-3 bg-slate-50/60 hover:bg-blue-50/40 transition">
-        <div class="flex items-center justify-between text-xs font-extrabold text-slate-800">
-          <span>📅 ${l.date}</span>
-          <span class="text-blue-600">تعديل ✎</span>
+      <div class="border border-slate-200 rounded-xl p-3 bg-slate-50 flex items-center justify-between gap-2">
+        <div>
+          <div class="text-xs font-extrabold text-slate-800">📅 ${l.date}</div>
+          <div class="text-[11px] text-slate-500 mt-0.5">${l.topic || 'بدون عنوان'}</div>
+          <div class="text-[11px] font-bold mt-1"><span class="text-emerald-700">حضور: ${p}</span> • <span class="text-rose-700">غياب: ${a}</span></div>
         </div>
-        <div class="text-[11px] text-slate-500 mt-1 truncate">${l.topic || 'محاضرة اعتيادية'}</div>
-        <div class="flex gap-2 mt-2 text-[11px] font-bold">
-          <span class="text-emerald-700">حضور: ${p}</span>
-          <span class="text-rose-700">غياب: ${a}</span>
-          <span class="text-amber-700">إجازة: ${e}</span>
-        </div>
+        <button onclick="document.getElementById('lectureDate').value='${l.date}'; checkExistingSession();" class="bg-white border border-slate-300 hover:bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold">
+          تعديل
+        </button>
       </div>
     `;
   }).join('');
@@ -1200,272 +1165,230 @@ function renderSectionHistory() {
 function loadLectureForEdit(sessionId) {
   const lec = lectures.find(l => l.id === sessionId);
   if (!lec) return;
-  if (!authenticatedProfessor && isAdminUnlocked) {
-    authenticatedProfessor = 'ALL';
+  if (!isAdminUnlocked && authenticatedProf !== lec.professor) {
+    showToast('لا تملك صلاحية تعديل محاضرة تدريسي آخر', '🔒');
+    return;
   }
-  applyProfessorLockUI();
+  if (isAdminUnlocked && !authenticatedProf) {
+    authenticatedProf = 'ALL';
+    const profSel = document.getElementById('profSelect');
+    profSel.value = 'ALL';
+    profSel.disabled = true;
+    document.getElementById('switchProfBtn').classList.remove('hidden');
+    populateSubjectsForProfessor('ALL');
+  }
+  switchTab('prof');
   document.getElementById('subjectSelect').value = lec.subjectId;
   document.getElementById('shiftSelect').value = lec.actualShift;
-  onShiftOrSectionChange();
+  updateSectionsDropdown();
   document.getElementById('sectionSelect').value = lec.section;
   document.getElementById('lectureDate').value = lec.date;
   checkExistingSession();
-  switchTab('prof');
-  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // ==================== 7. الاتصال السحابي الفوري (Firebase Firestore) ====================
-function updateCloudBadge(state, text) {
-  const dot = document.getElementById('cloudDot');
-  const label = document.getElementById('cloudText');
-  const badge = document.getElementById('cloudStatusBadge');
-  if (!dot || !label) return;
-  label.textContent = text;
-  dot.className = 'w-2 h-2 rounded-full ' + (
-    state === 'ok' ? 'bg-emerald-400' :
-    state === 'connecting' ? 'bg-amber-400 animate-ping' : 'bg-rose-400'
-  );
-  if (badge) {
-    badge.className = 'cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-slate-700 transition ' + (
-      state === 'ok' ? 'text-emerald-300' : state === 'connecting' ? 'text-amber-300' : 'text-rose-300'
-    );
-  }
-}
-
-async function initFirebaseCloud() {
-  const cfg = getFirebaseConfig();
-  if (!cfg || !cfg.apiKey || !cfg.projectId) {
-    updateCloudBadge('error', 'بانتظار ربط Firebase');
-    return;
-  }
-
-  updateCloudBadge('connecting', 'جاري الربط بـ Firebase...');
+function getFirebaseConfig() {
   try {
-    if (!firebase.apps.length) {
-      firebase.initializeApp(cfg);
+    const raw = localStorage.getItem(STORAGE_KEYS.FB_CONFIG);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.projectId) return parsed;
     }
-    auth = firebase.auth();
-    db = firebase.firestore();
-    db.settings({ merge: true });
-
-    try {
-      await auth.signInAnonymously();
-    } catch (authErr) {
-      console.warn('Anonymous auth skipped or disabled:', authErr);
-    }
-
-    startRealtimeSessionsListener();
-    updateCloudBadge('ok', 'متصل بالسحابة الفورية 🔥');
-  } catch (err) {
-    console.error('Firebase init error:', err);
-    updateCloudBadge('error', 'خطأ في إعدادات Firebase');
-  }
-}
-
-function startRealtimeSessionsListener() {
-  if (!db) return;
-  if (unsubscribeSessions) unsubscribeSessions();
-
-  unsubscribeSessions = db.collection('attendance_sessions').onSnapshot({ includeMetadataChanges: true }, snapshot => {
-    const cloudList = [];
-    snapshot.forEach(doc => {
-      const ses = doc.data();
-      const fullRec = { ...(ses.records || {}) };
-      students.forEach(st => {
-        if (st.stage === ses.stage && st.actualShift === ses.actualShift && st.section === ses.section) {
-          if (!fullRec[st.id]) fullRec[st.id] = 'P';
-        }
-      });
-      cloudList.push({ ...ses, id: ses.id || doc.id, records: fullRec });
-    });
-
-    lectures = cloudList;
-    saveLecturesToStorage();
-    checkExistingSession();
-    if (!document.getElementById('view-chair').classList.contains('hidden')) {
-      renderChairReport();
-    }
-    const isPending = snapshot.metadata.hasPendingWrites;
-    if (isPending) {
-      updateCloudBadge('connecting', `بانتظار الرفع للسيرفر (${lectures.length})...`);
-    } else {
-      updateCloudBadge('ok', `متصل ومُزامَن (${lectures.length} محاضرة) 🔥`);
-    }
-  }, err => {
-    console.error('Firestore listener error:', err);
-    updateCloudBadge('error', 'مرفوض من Firebase (افحص Rules)');
-    showToast('❌ قاعدة البيانات في Firebase ترفض الاتصال! تأكد من إنشاء Firestore وتفعيل Rules.', '❌');
-  });
-}
-
-async function saveCurrentLecture() {
-  if (!authenticatedProfessor) {
-    showToast('يرجى اختيار اسمك وإدخال الرمز السري أولاً', '🔒');
-    return;
-  }
-  const subId = document.getElementById('subjectSelect').value;
-  const course = CURRICULUM.find(c => c.id === subId) || CURRICULUM[0];
-  if (authenticatedProfessor !== 'ALL' && !isAdminUnlocked && !course.professors.includes(authenticatedProfessor)) {
-    showToast('❌ غير مصرح لك بتسجيل الحضور لهذه المادة!', '🔒');
-    return;
-  }
-  const profVal = authenticatedProfessor;
-  const professor = profVal === 'ALL' ? course.professors.join(' - ') : profVal;
-  const shift = document.getElementById('shiftSelect').value;
-  const section = document.getElementById('sectionSelect').value;
-  const date = document.getElementById('lectureDate').value;
-  const topic = document.getElementById('lectureTopic').value.trim();
-
-  if (!date) { showToast('يرجى تحديد تاريخ المحاضرة أولاً', '⚠️'); return; }
-
-  const compactRecords = {};
-  Object.keys(currentAttendanceMap).forEach(stuId => {
-    if (currentAttendanceMap[stuId] === 'A' || currentAttendanceMap[stuId] === 'E') {
-      compactRecords[stuId] = currentAttendanceMap[stuId];
-    }
-  });
-
-  const sessionId = `${subId}_${shift}_${section}_${date}`;
-  const sessionObj = {
-    id: sessionId,
-    date: date,
-    stage: course.stage,
-    actualShift: shift,
-    section: section,
-    subjectId: course.id,
-    subjectName: course.subject,
-    professor: professor,
-    topic: topic,
-    updatedAt: new Date().toISOString(),
-    records: compactRecords
-  };
-
-  const localObj = { ...sessionObj, records: { ...currentAttendanceMap } };
-  const idx = lectures.findIndex(l => l.id === sessionId);
-  if (idx >= 0) lectures[idx] = localObj;
-  else lectures.push(localObj);
-  saveLecturesToStorage();
-  checkExistingSession();
-
-  const saveBtn = document.getElementById('saveBtn');
-  saveBtn.disabled = true;
-  saveBtn.textContent = '⏳ جاري الرفع المؤكد للسيرفر...';
-
-  try {
-    if (!db) {
-      throw new Error('Firebase غير متصل');
-    }
-
-    // إرسال مباشر مع التحقق الفعلي من وصول البيانات للسيرفر خلال 7 ثوانٍ
-    const writeTask = (async () => {
-      await db.collection('attendance_sessions').doc(sessionId).set(sessionObj);
-      await db.waitForPendingWrites();
-      return 'confirmed';
-    })();
-
-    const timeoutTask = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('SERVER_UNREACHABLE')), 7000)
-    );
-
-    await Promise.race([writeTask, timeoutTask]);
-
-    updateCloudBadge('ok', `متصل ومُزامَن (${lectures.length} محاضرة) 🔥`);
-    showToast('✅ تم الرفع وتأكيد الحفظ في السيرفر السحابي بنجاح!', '🔥');
-  } catch (err) {
-    console.error('Save error:', err);
-    updateCloudBadge('error', 'فشل الرفع للسيرفر ⚠️');
-    if (err && err.message === 'SERVER_UNREACHABLE') {
-      showToast('⚠️ لم يصل السجل للسيرفر! افتح لوحة Firebase وتأكد من إنشاء Firestore Database وتفعيل Rules.', '⚠️');
-    } else if (err && err.code === 'permission-denied') {
-      showToast('❌ تم رفض الكتابة من Firebase! غيّر Firestore Rules إلى allow read, write: if true;', '❌');
-    } else {
-      showToast(`❌ تعذر الرفع للسحابة: ${err.message || 'تحقق من إعدادات Firestore'}`, '❌');
-    }
-  } finally {
-    saveBtn.disabled = false;
-    saveBtn.textContent = '💾 حفظ وإرسال الحضور للسحابة';
-  }
-}
-
-async function syncFromCloud(notify = false) {
-  if (!db) {
-    await initFirebaseCloud();
-    if (!db) {
-      if (notify) showToast('يرجى إدخال كود إعدادات Firebase أولاً', '⚠️');
-      return;
-    }
-  }
-  updateCloudBadge('connecting', 'جاري تحديث السجلات...');
-  try {
-    const snapshot = await db.collection('attendance_sessions').get();
-    const cloudList = [];
-    snapshot.forEach(doc => {
-      const ses = doc.data();
-      const fullRec = { ...(ses.records || {}) };
-      students.forEach(st => {
-        if (st.stage === ses.stage && st.actualShift === ses.actualShift && st.section === ses.section) {
-          if (!fullRec[st.id]) fullRec[st.id] = 'P';
-        }
-      });
-      cloudList.push({ ...ses, id: ses.id || doc.id, records: fullRec });
-    });
-    lectures = cloudList;
-    saveLecturesToStorage();
-    checkExistingSession();
-    renderChairReport();
-    updateCloudBadge('ok', `متصل (${lectures.length} محاضرة) 🔥`);
-    if (notify) showToast(`تمت المزامنة بنجاح (${lectures.length} محاضرة)`, '🔥');
-  } catch (err) {
-    updateCloudBadge('error', 'خطأ في جلب البيانات');
-    if (notify) showToast('تعذر جلب البيانات من Firebase. تأكد من تفعيل Firestore Rules.', '❌');
-  }
+  } catch (e) {}
+  return DEFAULT_FIREBASE_CONFIG;
 }
 
 function saveFirebaseConfig() {
-  const raw = document.getElementById('firebaseConfigInput').value.trim();
-  if (!raw) {
-    showToast('يرجى لصق كود إعدادات Firebase أولاً', '⚠️');
-    return;
-  }
+  const raw = (document.getElementById('firebaseConfigInput').value || '').trim();
+  if (!raw) { showToast('يرجى لصق كود إعدادات Firebase أولاً', '⚠️'); return; }
   try {
     let parsed = null;
     if (raw.startsWith('{')) {
       parsed = JSON.parse(raw);
     } else {
-      const apiKey = (raw.match(/apiKey\s*:\s*["']([^"']+)["']/) || [])[1];
-      const authDomain = (raw.match(/authDomain\s*:\s*["']([^"']+)["']/) || [])[1];
-      const projectId = (raw.match(/projectId\s*:\s*["']([^"']+)["']/) || [])[1];
-      const storageBucket = (raw.match(/storageBucket\s*:\s*["']([^"']+)["']/) || [])[1];
-      const messagingSenderId = (raw.match(/messagingSenderId\s*:\s*["']([^"']+)["']/) || [])[1];
-      const appId = (raw.match(/appId\s*:\s*["']([^"']+)["']/) || [])[1];
-      if (apiKey && projectId) {
-        parsed = { apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId };
-      }
+      const getVal = (key) => {
+        const m = raw.match(new RegExp(`${key}\\s*:\\s*["']([^"']+)["']`));
+        return m ? m[1] : '';
+      };
+      parsed = {
+        apiKey: getVal('apiKey'),
+        authDomain: getVal('authDomain'),
+        projectId: getVal('projectId'),
+        storageBucket: getVal('storageBucket'),
+        messagingSenderId: getVal('messagingSenderId'),
+        appId: getVal('appId')
+      };
     }
-    if (!parsed || !parsed.apiKey || !parsed.projectId) {
-      throw new Error('Invalid config');
+    if (!parsed || !parsed.projectId || !parsed.apiKey) {
+      showToast('صيغة إعدادات Firebase غير مكتملة', '❌');
+      return;
     }
     localStorage.setItem(STORAGE_KEYS.FB_CONFIG, JSON.stringify(parsed));
-    showToast('تم حفظ الإعدادات وجاري الاتصال بـ Firebase...', '🔥');
     initFirebaseCloud();
-  } catch (err) {
-    showToast('صيغة كود Firebase غير صحيحة، انسخ كائن firebaseConfig كاملاً', '❌');
+    showToast('تم حفظ الإعدادات والربط بالسحابة بنجاح', '🔥');
+  } catch (e) {
+    showToast('تعذر قراءة كود الإعدادات، تأكد من نسخه كاملاً', '❌');
+  }
+}
+
+function updateCloudBadge(status, text) {
+  const badge = document.getElementById('cloudStatusBadge');
+  const dot = document.getElementById('cloudDot');
+  const label = document.getElementById('cloudText');
+  if (!badge || !dot || !label) return;
+  label.textContent = text;
+  if (status === 'connected') {
+    badge.className = 'cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-950 border border-emerald-600 text-emerald-300 hover:bg-emerald-900 transition';
+    dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+  } else if (status === 'error') {
+    badge.className = 'cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-rose-950 border border-rose-600 text-rose-300 hover:bg-rose-900 transition';
+    dot.className = 'w-2 h-2 rounded-full bg-rose-400';
+  } else {
+    badge.className = 'cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-slate-800 border border-slate-700 text-amber-300 hover:bg-slate-700 transition';
+    dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-ping';
+  }
+}
+
+function initFirebaseCloud() {
+  const cfg = getFirebaseConfig();
+  if (!cfg || typeof firebase === 'undefined') {
+    updateCloudBadge('error', 'غير متصل بالسحابة');
+    return;
+  }
+  try {
+    if (!firebase.apps.length) {
+      firebase.initializeApp(cfg);
+    }
+    db = firebase.firestore();
+    if (unsubscribeSessions) unsubscribeSessions();
+
+    unsubscribeSessions = db.collection('attendance_sessions').onSnapshot(
+      (snapshot) => {
+        const cloudList = [];
+        snapshot.forEach(doc => {
+          cloudList.push({ id: doc.id, ...doc.data() });
+        });
+        lectures = cloudList;
+        saveLecturesToStorage();
+        updateCloudBadge('connected', `متصل ومُزامَن (${lectures.length} محاضرة) 🔥`);
+        checkExistingSession();
+        if (!document.getElementById('view-chair').classList.contains('hidden')) {
+          renderChairReport();
+        }
+      },
+      (err) => {
+        console.error('Firestore listener error:', err);
+        updateCloudBadge('error', 'فشل الاتصال بالسحابة ⚠️');
+      }
+    );
+  } catch (e) {
+    console.error('Firebase init error:', e);
+    updateCloudBadge('error', 'خطأ في تهيئة السحابة');
+  }
+}
+
+async function syncFromCloud(manual = false) {
+  if (!db) {
+    initFirebaseCloud();
+    return;
+  }
+  try {
+    const snap = await db.collection('attendance_sessions').get();
+    const cloudList = [];
+    snap.forEach(doc => cloudList.push({ id: doc.id, ...doc.data() }));
+    lectures = cloudList;
+    saveLecturesToStorage();
+    updateCloudBadge('connected', `متصل ومُزامَن (${lectures.length} محاضرة) 🔥`);
+    checkExistingSession();
+    renderChairReport();
+    if (manual) showToast(`تمت المزامنة الفورية (${lectures.length} محاضرة)`, '🔄');
+  } catch (e) {
+    updateCloudBadge('error', 'فشل المزامنة من السيرفر ⚠️');
+    if (manual) showToast('تعذر جلب البيانات من السحابة', '❌');
+  }
+}
+
+async function saveCurrentLecture() {
+  if (!authenticatedProf) {
+    showToast('يرجى اختيار اسمك وإدخال الرمز السري أولاً', '⚠️');
+    return;
+  }
+  const subId = document.getElementById('subjectSelect').value;
+  const course = CURRICULUM.find(c => c.id === subId);
+  if (!course) { showToast('يرجى اختيار المادة الدراسية', '⚠️'); return; }
+
+  const shift = document.getElementById('shiftSelect').value;
+  const section = document.getElementById('sectionSelect').value;
+  const date = document.getElementById('lectureDate').value;
+  const topic = (document.getElementById('lectureTopic').value || '').trim();
+  if (!date) { showToast('يرجى تحديد تاريخ المحاضرة', '⚠️'); return; }
+
+  const sectionStudents = getFilteredSectionStudents();
+  const recordsToSave = {};
+  sectionStudents.forEach(s => {
+    recordsToSave[s.id] = currentRecords[s.id] || 'P';
+  });
+
+  const sessionId = `${subId}_${course.stage}_${shift}_${section}_${date}`;
+  const profName = authenticatedProf === 'ALL' ? (course.professors[0] || 'رئاسة القسم') : authenticatedProf;
+  const sessionObj = {
+    id: sessionId,
+    subjectId: subId,
+    subjectName: course.subject,
+    stage: course.stage,
+    professor: profName,
+    actualShift: shift,
+    section,
+    date,
+    topic,
+    records: recordsToSave,
+    updatedAt: new Date().toISOString().replace('T', ' ').slice(0, 16)
+  };
+
+  const idx = lectures.findIndex(l => l.id === sessionId);
+  if (idx >= 0) lectures[idx] = sessionObj;
+  else lectures.push(sessionObj);
+  saveLecturesToStorage();
+  renderSectionHistory();
+
+  const btn = document.getElementById('saveBtn');
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ جاري الحفظ في السحابة...';
+
+  if (db) {
+    try {
+      const writePromise = db.collection('attendance_sessions').doc(sessionId).set(sessionObj);
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 5000));
+      await Promise.race([writePromise, timeoutPromise]);
+      updateCloudBadge('connected', `متصل ومُزامَن (${lectures.length} محاضرة) 🔥`);
+      showToast('تم الرفع وتأكيد الحفظ في السيرفر السحابي بنجاح!', '✅');
+    } catch (err) {
+      console.error('Save error:', err);
+      updateCloudBadge('error', 'فشل الرفع للسيرفر ⚠️');
+      showToast('تعذر تأكيد الرفع للسيرفر، تم الحفظ محلياً مؤقتاً', '⚠️');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+  } else {
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+    showToast('تم حفظ الحضور محلياً', '✅');
   }
 }
 
 function openFirebaseGuideModal() {
-  openModal('📖 خطوات إنشاء قاعدة بيانات Firebase مجانية (دقيقتان)', `
+  openModal('🔥 ربط قاعدة البيانات السحابية (Firebase Firestore)', `
     <ol class="list-decimal list-inside space-y-2 text-xs text-slate-700 leading-relaxed">
-      <li>افتح موقع <a href="https://console.firebase.google.com" target="_blank" class="text-blue-600 underline font-bold">console.firebase.google.com</a> وسجل الدخول بحساب Gmail.</li>
-      <li>اضغط <strong>Add project</strong> ← اكتب اسماً (مثلاً <code>acc-attendance</code>) ← اضغط Continue ثم Create project.</li>
-      <li>من القائمة الجانبية اليسرى اختر <strong>Build ← Firestore Database</strong> ← اضغط <strong>Create database</strong> ← اختر <strong>Start in test mode</strong> ثم Enable.</li>
-      <li>ارجع للصفحة الرئيسية للمشروع واضغط أيقونة الويب <strong>&lt;/&gt;</strong> (Web) ← اكتب اسماً للتطبيق واضغط Register app.</li>
-      <li>انسخ الجزء الذي يبدأ بـ <code>const firebaseConfig = { ... };</code> والصقه في خانة الإعدادات هنا، ثم أرسله لي لأثبّته لك في الكود ليعمل تلقائياً عند جميع الأساتذة.</li>
+      <li>المشروع السحابي الحالي مربوط تلقائياً بمشروع: <strong dir="ltr" class="text-blue-700">acc-attendance-56ebd</strong>.</li>
+      <li>من لوحة تحكم Firebase افتح <strong>Firestore Database</strong> وتأكد من تفعيل القاعدة في وضع الاختبار أو السماح بالقراءة والكتابة في تبويب <strong>Rules</strong>.</li>
+      <li>جميع سجلات الحضور تُحفظ وتُزامن لحظياً بين هواتف التدريسيين ولوحة رئيس القسم.</li>
     </ol>
   `);
 }
 
-// ==================== 8. معادلة الـ 15 محاضرة وحسابات الإنذارات ====================
+// ==================== 8. معادلة الساعات (3 × 15 = 45 ساعة) وحسابات الإنذارات ====================
 function getStageThresholds(stage) {
   const isStage4 = (stage === 'الرابعة');
   return {
@@ -1475,35 +1398,103 @@ function getStageThresholds(stage) {
   };
 }
 
-function calculateStudentStats(student, subjectFilter = 'ALL') {
-  let present = 0, absent = 0, excused = 0;
+function evaluateSubjectAlert(absentLectures, stage) {
+  const weeks = Number(settings.courseLectures) || 15;
+  const hrsPerLec = Number(settings.lectureHours) || 3;
+  const totalSubjectHours = weeks * hrsPerLec; // 3 × 15 = 45 ساعة
+  const absentHours = absentLectures * hrsPerLec;
+  const pct = totalSubjectHours > 0 ? (absentHours / totalSubjectHours) * 100 : 0;
 
-  lectures.forEach(lec => {
-    if (lec.stage !== student.stage || lec.actualShift !== student.actualShift || lec.section !== student.section) return;
-    if (subjectFilter !== 'ALL' && lec.subjectId !== subjectFilter) return;
+  const th = getStageThresholds(stage);
+  // تقريب ساعات العتبة للأعلى كما في الضوابط: 45×8%=3.6->4 ساعات، 45×10%=4.5->5 ساعات، 45×14%=6.3->7 ساعات
+  const warn1HoursReq = Math.ceil((totalSubjectHours * th.w1) / 100);
+  const warn2HoursReq = Math.ceil((totalSubjectHours * th.w2) / 100);
+  const expelHoursReq = Math.ceil((totalSubjectHours * th.expel) / 100);
 
-    const status = (lec.records && lec.records[student.id]) ? lec.records[student.id] : 'P';
-    if (status === 'P') present++;
-    else if (status === 'A') absent++;
-    else if (status === 'E') excused++;
-  });
-
-  const courseLectures = Number(settings.courseLectures) || 15;
-  let denominator = courseLectures;
-  if (subjectFilter === 'ALL') {
-    const stageSubjectsCount = CURRICULUM.filter(c => c.stage === student.stage).length || 7;
-    denominator = courseLectures * stageSubjectsCount;
+  let statusCode = 'OK', statusLabel = 'منتظم', rank = 0;
+  if (absentHours >= expelHoursReq) {
+    statusCode = 'EXPELLED'; statusLabel = 'فصل بالغياب'; rank = 3;
+  } else if (absentHours >= warn2HoursReq) {
+    statusCode = 'WARN2'; statusLabel = 'إنذار نهائي'; rank = 2;
+  } else if (absentHours >= warn1HoursReq) {
+    statusCode = 'WARN1'; statusLabel = 'إنذار أولي'; rank = 1;
   }
 
-  const pct = denominator > 0 ? (absent / denominator) * 100 : 0;
-  const th = getStageThresholds(student.stage);
+  return {
+    absentLectures,
+    absentHours,
+    totalSubjectHours,
+    pct,
+    statusCode,
+    statusLabel,
+    rank,
+    warn1HoursReq,
+    warn2HoursReq,
+    expelHoursReq
+  };
+}
 
-  let statusCode = 'OK', statusLabel = 'منتظم';
-  if (pct >= th.expel) { statusCode = 'EXPELLED'; statusLabel = 'فصل بالغياب'; }
-  else if (pct >= th.w2) { statusCode = 'WARN2'; statusLabel = 'إنذار نهائي'; }
-  else if (pct >= th.w1) { statusCode = 'WARN1'; statusLabel = 'إنذار أولي'; }
+function calculateStudentStats(student, subjectFilter = 'ALL') {
+  const weeks = Number(settings.courseLectures) || 15;
+  const hrsPerLec = Number(settings.lectureHours) || 3;
+  const totalSubjectHours = weeks * hrsPerLec; // 45 ساعة للمادة
 
-  return { present, absent, excused, denominator, pct, statusCode, statusLabel };
+  if (subjectFilter !== 'ALL') {
+    let present = 0, absent = 0, excused = 0;
+    lectures.forEach(lec => {
+      if (lec.stage !== student.stage || lec.actualShift !== student.actualShift || lec.section !== student.section) return;
+      if (lec.subjectId !== subjectFilter) return;
+      const status = (lec.records && lec.records[student.id]) ? lec.records[student.id] : 'P';
+      if (status === 'P') present++;
+      else if (status === 'A') absent++;
+      else if (status === 'E') excused++;
+    });
+
+    const evalRes = evaluateSubjectAlert(absent, student.stage);
+    return {
+      present,
+      absent,
+      excused,
+      absentHours: evalRes.absentHours,
+      denominator: totalSubjectHours,
+      pct: evalRes.pct,
+      statusCode: evalRes.statusCode,
+      statusLabel: evalRes.statusLabel
+    };
+  }
+
+  // في التقرير الشامل (جميع المواد): نحتسب الموقف بناءً على أشد حالة إنذار وصل إليها الطالب في أي مادة دراسية
+  const stageCourses = CURRICULUM.filter(c => c.stage === student.stage);
+  let totalPresent = 0, totalAbsent = 0, totalExcused = 0;
+  let worstEval = evaluateSubjectAlert(0, student.stage);
+
+  stageCourses.forEach(c => {
+    let subAbsent = 0;
+    lectures.forEach(lec => {
+      if (lec.stage !== student.stage || lec.actualShift !== student.actualShift || lec.section !== student.section) return;
+      if (lec.subjectId !== c.id) return;
+      const status = (lec.records && lec.records[student.id]) ? lec.records[student.id] : 'P';
+      if (status === 'P') totalPresent++;
+      else if (status === 'A') { totalAbsent++; subAbsent++; }
+      else if (status === 'E') totalExcused++;
+    });
+
+    const subEval = evaluateSubjectAlert(subAbsent, student.stage);
+    if (subEval.rank > worstEval.rank || (subEval.rank === worstEval.rank && subEval.absentHours > worstEval.absentHours)) {
+      worstEval = subEval;
+    }
+  });
+
+  return {
+    present: totalPresent,
+    absent: totalAbsent,
+    excused: totalExcused,
+    absentHours: totalAbsent * hrsPerLec,
+    denominator: totalSubjectHours,
+    pct: worstEval.pct,
+    statusCode: worstEval.statusCode,
+    statusLabel: worstEval.statusLabel
+  };
 }
 
 // ==================== 9. لوحة رئيس القسم والتصدير إلى Excel ====================
@@ -1537,8 +1528,13 @@ function renderChairReport() {
   const search = (document.getElementById('chairSearchInput').value || '').trim();
 
   const courseLecs = Number(settings.courseLectures) || 15;
+  const lecHours = Number(settings.lectureHours) || 3;
+  const totalHours = courseLecs * lecHours;
+
   document.getElementById('displayCourseLectures').textContent = courseLecs;
-  document.getElementById('tableMaxLectures').textContent = subject === 'ALL' ? `${courseLecs}×المواد` : courseLecs;
+  document.getElementById('displayLectureHours').textContent = lecHours;
+  document.getElementById('displayTotalHours').textContent = totalHours;
+  document.getElementById('tableMaxLectures').textContent = totalHours;
 
   let w1Count = 0, w2Count = 0, expCount = 0;
   students.forEach(s => {
@@ -1587,8 +1583,8 @@ function renderChairReport() {
           <td class="py-2.5 px-3 text-center text-xs font-semibold">${s.actualShift}</td>
           <td class="py-2.5 px-3 text-center text-xs font-bold">${s.section}</td>
           <td class="py-2.5 px-3 text-center font-bold text-emerald-700">${st.present}</td>
-          <td class="py-2.5 px-3 text-center font-bold text-rose-700">${st.absent}</td>
-          <td class="py-2.5 px-3 text-center font-bold text-amber-700">${st.excused}</td>
+          <td class="py-2.5 px-3 text-center font-bold text-rose-700">${st.absent} محاضرة</td>
+          <td class="py-2.5 px-3 text-center font-extrabold text-rose-800">${st.absentHours} ساعة</td>
           <td class="py-2.5 px-3 text-center font-extrabold">${st.pct.toFixed(1)}%</td>
           <td class="py-2.5 px-3 text-center">${badge}</td>
           <td class="py-2.5 px-3 text-center no-print">
@@ -1630,7 +1626,9 @@ function showStudentDetails(studentId) {
   if (!s) return;
   const stageCourses = CURRICULUM.filter(c => c.stage === s.stage);
   const courseLecs = Number(settings.courseLectures) || 15;
-  const th = getStageThresholds(s.stage);
+  const lecHours = Number(settings.lectureHours) || 3;
+  const totalHours = courseLecs * lecHours;
+  const sampleEval = evaluateSubjectAlert(0, s.stage);
 
   const rowsHtml = stageCourses.map(c => {
     const st = calculateStudentStats(s, c.id);
@@ -1638,8 +1636,8 @@ function showStudentDetails(studentId) {
       <tr class="border-b border-slate-100">
         <td class="py-2 px-3 font-bold">${c.subject}</td>
         <td class="py-2 px-3 text-center text-emerald-700 font-bold">${st.present}</td>
-        <td class="py-2 px-3 text-center text-rose-700 font-bold">${st.absent}</td>
-        <td class="py-2 px-3 text-center text-amber-700 font-bold">${st.excused}</td>
+        <td class="py-2 px-3 text-center text-rose-700 font-bold">${st.absent} محاضرة</td>
+        <td class="py-2 px-3 text-center text-rose-800 font-extrabold">${st.absentHours} ساعة</td>
         <td class="py-2 px-3 text-center font-extrabold">${st.pct.toFixed(1)}%</td>
         <td class="py-2 px-3 text-center font-bold">${st.statusLabel}</td>
       </tr>
@@ -1647,19 +1645,19 @@ function showStudentDetails(studentId) {
   }).join('');
 
   openModal(`📋 سجل الطالب: ${s.name}`, `
-    <div class="bg-slate-50 p-3 rounded-xl text-xs flex flex-wrap gap-4 font-bold text-slate-700">
+    <div class="bg-slate-50 p-3 rounded-xl text-xs flex flex-wrap gap-3 font-bold text-slate-700">
       <span>المرحلة: ${s.stage}</span>
       <span>الدوام: ${s.actualShift}</span>
       <span>الشعبة: ${s.section}</span>
-      <span>عتبات الإنذار: ${th.w1}% / ${th.w2}% / فصل ${th.expel}% (من ${courseLecs} محاضرة)</span>
+      <span class="text-blue-800">المعادلة: ${lecHours} × ${courseLecs} = ${totalHours} ساعة (أولي ≥ ${sampleEval.warn1HoursReq}س | نهائي ≥ ${sampleEval.warn2HoursReq}س | فصل ≥ ${sampleEval.expelHoursReq}س)</span>
     </div>
     <table class="w-full text-right text-xs border-collapse mt-2">
       <thead>
         <tr class="bg-slate-800 text-white">
           <th class="py-2 px-3">المادة</th>
           <th class="py-2 px-3 text-center">حضور</th>
-          <th class="py-2 px-3 text-center">غياب</th>
-          <th class="py-2 px-3 text-center">إجازة</th>
+          <th class="py-2 px-3 text-center">محاضرات الغياب</th>
+          <th class="py-2 px-3 text-center">ساعات الغياب</th>
           <th class="py-2 px-3 text-center">النسبة</th>
           <th class="py-2 px-3 text-center">الموقف</th>
         </tr>
@@ -1718,8 +1716,9 @@ function exportReportExcel() {
       'المرحلة': s.stage,
       'الدوام الفعلي': s.actualShift,
       'الشعبة': s.section,
-      'عدد الحضور': st.present,
-      'عدد الغياب': st.absent,
+      'محاضرات الحضور': st.present,
+      'محاضرات الغياب': st.absent,
+      'ساعات الغياب': st.absentHours,
       'الإجازات': st.excused,
       'نسبة الغياب %': `${st.pct.toFixed(1)}%`,
       'حالة الإنذار': st.statusLabel
@@ -1738,12 +1737,42 @@ function loadSettingsUI() {
   const cfg = getFirebaseConfig();
   if (cfg) document.getElementById('firebaseConfigInput').value = JSON.stringify(cfg);
   document.getElementById('courseLecturesInput').value = settings.courseLectures || 15;
+  document.getElementById('lectureHoursInput').value = settings.lectureHours || 3;
   document.getElementById('s123Warn1').value = settings.s123Warn1 || 8;
   document.getElementById('s123Warn2').value = settings.s123Warn2 || 10;
   document.getElementById('s123Expel').value = settings.s123Expel || 14;
   document.getElementById('s4Warn1').value = settings.s4Warn1 || 5;
   document.getElementById('s4Warn2').value = settings.s4Warn2 || 10;
   document.getElementById('s4Expel').value = settings.s4Expel || 15;
+  updateHoursPreview();
+}
+
+function updateHoursPreview() {
+  const weeks = Number(document.getElementById('courseLecturesInput').value) || 15;
+  const hrs = Number(document.getElementById('lectureHoursInput').value) || 3;
+  const total = weeks * hrs;
+  const h8 = Math.ceil((total * 8) / 100);
+  const h10 = Math.ceil((total * 10) / 100);
+  const h14 = Math.ceil((total * 14) / 100);
+  const preview = document.getElementById('hoursFormulaPreview');
+  if (preview) {
+    preview.textContent = `المجموع: ${hrs} × ${weeks} = ${total} ساعة | 8% ≈ ${h8} ساعات (${Math.ceil(h8 / hrs)} محاضرات: إنذار أولي) | 10% ≈ ${h10} ساعات (${Math.ceil(h10 / hrs)} محاضرات: إنذار نهائي) | 14% ≈ ${h14} ساعات (${Math.ceil(h14 / hrs)} محاضرات: فصل)`;
+  }
+}
+
+function saveWarningSettings() {
+  settings.courseLectures = Number(document.getElementById('courseLecturesInput').value) || 15;
+  settings.lectureHours = Number(document.getElementById('lectureHoursInput').value) || 3;
+  settings.s123Warn1 = Number(document.getElementById('s123Warn1').value) || 8;
+  settings.s123Warn2 = Number(document.getElementById('s123Warn2').value) || 10;
+  settings.s123Expel = Number(document.getElementById('s123Expel').value) || 14;
+  settings.s4Warn1 = Number(document.getElementById('s4Warn1').value) || 5;
+  settings.s4Warn2 = Number(document.getElementById('s4Warn2').value) || 10;
+  settings.s4Expel = Number(document.getElementById('s4Expel').value) || 15;
+  saveSettingsToStorage();
+  updateHoursPreview();
+  renderChairReport();
+  showToast('تم حفظ معادلة الساعات (3 × 15 = 45) وتحديث الإنذارات بنجاح', '⚖️');
 }
 
 function saveWarningSettings() {
