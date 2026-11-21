@@ -102,9 +102,15 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <div class="lg:col-span-2">
-            <label class="block text-xs font-bold text-slate-600 mb-1.5">اسم الأستاذ التدريسي</label>
-            <select id="profSelect" onchange="onProfessorChange()" class="w-full rounded-xl border-slate-300 border bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
-              <option value="ALL">-- عرض الكل / وضع رئيس القسم (جميع المواد) --</option>
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="block text-xs font-bold text-slate-600">اسم الأستاذ التدريسي</label>
+              <button id="switchProfBtn" onclick="logoutProfessor()" class="hidden text-[11px] font-bold text-rose-600 hover:underline">
+                🔄 تغيير الأستاذ / تسجيل الخروج
+              </button>
+            </div>
+            <select id="profSelect" onchange="onProfessorSelectAttempt()" class="w-full rounded-xl border-slate-300 border bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="">-- اختر اسمك لتسجيل الدخول إلى موادك --</option>
+              <option value="ALL">-- وضع رئيس القسم (جميع المواد) 🔒 --</option>
             </select>
           </div>
 
@@ -477,8 +483,8 @@
             💾 حفظ ضوابط الكورس ونسب الإنذار وتحديث التقارير
           </button>
 
-          <div class="pt-3 border-t border-slate-100">
-            <h4 class="text-xs font-extrabold text-slate-700 mb-2 flex items-center gap-1.5">
+          <div class="pt-3 border-t border-slate-100 space-y-2">
+            <h4 class="text-xs font-extrabold text-slate-700 flex items-center gap-1.5">
               <span>🔐</span> تغيير الرمز السري (PIN) للوحة رئيس القسم
             </h4>
             <div class="flex gap-2">
@@ -487,6 +493,9 @@
                 تحديث الرمز
               </button>
             </div>
+            <button onclick="openProfessorsPinsModal()" class="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold py-2.5 px-4 rounded-xl text-xs transition flex items-center justify-center gap-2">
+              🔑 إدارة الرموز السرية والروابط الخاصة بالتدريسيين
+            </button>
           </div>
         </div>
 
@@ -667,6 +676,49 @@ let settings = {
 let currentAttendanceMap = {};
 let isAdminUnlocked = false;
 let pendingProtectedTab = null;
+let authenticatedProfessor = null; // الأستاذ الذي تم التحقق من هويته حالياً
+
+// الرموز السرية الافتراضية للتدريسيين (4 أرقام لكل تدريسي لضمان الخصوصية)
+const DEFAULT_PROF_PINS = {
+  "منتصر عمران ناجي": "1101",
+  "ثامر ياس خضير": "1102",
+  "أمل محمد سلمان": "1103",
+  "أنمار عدنان خضير": "1104",
+  "حيدر علي جراد": "1105",
+  "حسام محمد علي مهدي": "1106",
+  "حسين عمران ناجي": "1107",
+  "محمد علي جعفر": "1108",
+  "صلاح مهدي الكواز": "1109",
+  "صادق هادي محي": "1110",
+  "أزهر صبحي عبد الحسين": "1111",
+  "محمد حسين علي": "1112",
+  "علي محمد شنان": "1113",
+  "محمد وفي عباس": "1114",
+  "أحمد ناصر عباس": "1115",
+  "عبد الرسول عبد العباس": "1116",
+  "علي محمد حسن محمد جواد": "1117",
+  "لمياء علي ابراهيم": "1118",
+  "ميساء سعد حبي": "1119",
+  "أحمد نعمة عبد": "1120",
+  "حسن عبد الكريم": "1121",
+  "جاسم عيدان براك": "1122",
+  "جنان عبد خاجي": "1123",
+  "حسين عبد علي": "1124",
+  "محمد ديوان شنيور": "1125",
+  "مرتضى حسن خليف": "1126",
+  "بشرى جابر محمد جواد": "1127",
+  "مشتاق طالب عبد الامير": "1128",
+  "شهد عودة عبد العباس": "1129",
+  "أحمد نجاح هادي": "1130",
+  "مؤيد مهدي صالح": "1131",
+  "محمد جبار فشاخ": "1132",
+  "أيمن محمد علي": "1133",
+  "علي عبد الحسن": "1134",
+  "هالة كريم رضا": "1135",
+  "ليلى محسن الحكيم": "1136",
+  "فرقد محمد بكر": "1137",
+  "فاروق خضير عباس": "1138"
+};
 
 function buildDefaultStudentsList() {
   const list = [];
@@ -688,6 +740,18 @@ function buildDefaultStudentsList() {
   return list;
 }
 
+function getFirebaseConfig() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEYS.FB_CONFIG);
+    if (saved) return JSON.parse(saved);
+  } catch (e) {}
+  return DEFAULT_FIREBASE_CONFIG;
+}
+
+function saveStudentsToStorage() { localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students)); }
+function saveLecturesToStorage() { localStorage.setItem(STORAGE_KEYS.LECTURES, JSON.stringify(lectures)); }
+function saveSettingsToStorage() { localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings)); }
+
 function loadState() {
   try {
     const savedStudents = localStorage.getItem(STORAGE_KEYS.STUDENTS);
@@ -708,19 +772,13 @@ function loadState() {
     const savedSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     if (savedSettings) settings = { ...settings, ...JSON.parse(savedSettings) };
   } catch (e) {}
-}
 
-function getFirebaseConfig() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEYS.FB_CONFIG);
-    if (saved) return JSON.parse(saved);
-  } catch (e) {}
-  return DEFAULT_FIREBASE_CONFIG;
+  if (!settings.profPins) {
+    settings.profPins = { ...DEFAULT_PROF_PINS };
+  } else {
+    settings.profPins = { ...DEFAULT_PROF_PINS, ...settings.profPins };
+  }
 }
-
-function saveStudentsToStorage() { localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students)); }
-function saveLecturesToStorage() { localStorage.setItem(STORAGE_KEYS.LECTURES, JSON.stringify(lectures)); }
-function saveSettingsToStorage() { localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings)); }
 
 // ==================== 5. نظام الحماية بالرمز السري ====================
 function requestProtectedTab(tabName) {
@@ -751,7 +809,8 @@ function verifyAdminPin() {
     showToast('تم فتح صلاحيات الإدارة بنجاح', '🔓');
   } else {
     document.getElementById('pinErrorMsg').classList.remove('hidden');
-    inp.value = ''; inp.focus();
+    inp.value = '';
+    inp.focus();
   }
 }
 
@@ -791,32 +850,192 @@ function switchTab(tab) {
   if (tab === 'chair') {
     populateChairSubjects();
     renderChairReport();
+    syncFromCloud(false);
   } else if (tab === 'settings') {
     loadSettingsUI();
     renderManageStudentsTable();
   }
 }
 
-// ==================== 6. واجهة الأستاذ التدريسي ====================
+// ==================== 6. واجهة الأستاذ التدريسي وصلاحيات القفل ====================
 function initProfessorView() {
   const profSelect = document.getElementById('profSelect');
   const profSet = new Set();
   CURRICULUM.forEach(c => c.professors.forEach(p => profSet.add(p)));
   Array.from(profSet).sort((a, b) => a.localeCompare(b, 'ar')).forEach(p => {
     const opt = document.createElement('option');
-    opt.value = p; opt.textContent = p;
+    opt.value = p;
+    opt.textContent = `👨‍🏫 ${p}`;
     profSelect.appendChild(opt);
   });
 
   const dateInput = document.getElementById('lectureDate');
   if (!dateInput.value) dateInput.value = new Date().toISOString().split('T')[0];
-  onProfessorChange();
+
+  // التحقق من وجود رابط مخصص للأستاذ (?prof=اسم_الاستاذ) أو جلسة محفوظة
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlProf = urlParams.get('prof');
+  const savedAuthProf = sessionStorage.getItem('acc_auth_prof');
+
+  if (urlProf && profSet.has(urlProf)) {
+    profSelect.value = urlProf;
+    onProfessorSelectAttempt();
+  } else if (savedAuthProf && profSet.has(savedAuthProf)) {
+    authenticatedProfessor = savedAuthProf;
+    applyProfessorLockUI();
+  } else {
+    lockProfessorFormState(true);
+  }
 }
 
-function onProfessorChange() {
-  const selectedProf = document.getElementById('profSelect').value;
+function lockProfessorFormState(locked) {
+  const subjectSelect = document.getElementById('subjectSelect');
+  const shiftSelect = document.getElementById('shiftSelect');
+  const sectionSelect = document.getElementById('sectionSelect');
+  const saveBtn = document.getElementById('saveBtn');
+
+  subjectSelect.disabled = locked;
+  shiftSelect.disabled = locked;
+  sectionSelect.disabled = locked;
+  saveBtn.disabled = locked;
+
+  if (locked) {
+    subjectSelect.innerHTML = '<option value="">🔒 يرجى اختيار اسمك وإدخال الرمز السري أولاً</option>';
+    document.getElementById('attendanceTableBody').innerHTML = `
+      <tr>
+        <td colspan="5" class="py-12 text-center">
+          <div class="inline-block bg-blue-50 border border-blue-200 rounded-2xl p-6 max-w-md">
+            <div class="text-3xl mb-2">🔐</div>
+            <div class="font-extrabold text-slate-800 text-sm mb-1">بوابة تسجيل الحضور المحمية للتدريسيين</div>
+            <p class="text-xs text-slate-600">يرجى اختيار اسمك من قائمة <strong>(اسم الأستاذ التدريسي)</strong> أعلاه وإدخال الرمز السري الخاص بك لعرض موادك وشعبك الدراسية فقط.</p>
+          </div>
+        </td>
+      </tr>`;
+    document.getElementById('countTotal').textContent = '0';
+    document.getElementById('countPresent').textContent = '0';
+    document.getElementById('countAbsent').textContent = '0';
+    document.getElementById('countExcused').textContent = '0';
+    document.getElementById('sectionHistoryList').innerHTML = '';
+  }
+}
+
+function onProfessorSelectAttempt() {
+  const profSelect = document.getElementById('profSelect');
+  const chosen = profSelect.value;
+
+  if (!chosen) {
+    authenticatedProfessor = null;
+    sessionStorage.removeItem('acc_auth_prof');
+    lockProfessorFormState(true);
+    return;
+  }
+
+  // وضع رئيس القسم يتطلب رمز رئيس القسم
+  if (chosen === 'ALL') {
+    if (isAdminUnlocked) {
+      authenticatedProfessor = 'ALL';
+      applyProfessorLockUI();
+      return;
+    }
+    openModal('🔒 الدخول إلى وضع رئيس القسم (جميع المواد)', `
+      <div class="space-y-3">
+        <p class="text-xs text-slate-600">عرض جميع المواد مخصص لرئيس القسم فقط. أدخل رمز رئيس القسم (PIN):</p>
+        <input type="password" id="profPinInput" onkeydown="if(event.key==='Enter') verifyProfessorPin('ALL')" placeholder="رمز رئيس القسم" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-center text-base font-extrabold tracking-widest outline-none focus:ring-2 focus:ring-blue-500" autofocus />
+        <p id="profPinError" class="hidden text-xs text-rose-600 font-bold text-center">❌ الرمز السري غير صحيح.</p>
+        <button onclick="verifyProfessorPin('ALL')" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-sm">🔓 فتح جميع المواد</button>
+      </div>
+    `);
+    setTimeout(() => { const el = document.getElementById('profPinInput'); if (el) el.focus(); }, 100);
+    return;
+  }
+
+  // إذا كان رئيس القسم قد فتح الجلسة مسبقاً أو الأستاذ مسجل دخول بالفعل
+  if (isAdminUnlocked || authenticatedProfessor === chosen) {
+    authenticatedProfessor = chosen;
+    applyProfessorLockUI();
+    return;
+  }
+
+  // طلب الرمز السري الخاص بالأستاذ
+  openModal(`🔐 التحقق من هوية التدريسي`, `
+    <div class="space-y-3">
+      <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs font-bold text-blue-900">
+        الأستاذ التدريسي: <span class="underline">${chosen}</span>
+      </div>
+      <p class="text-xs text-slate-600">أدخل الرمز السري الخاص بك لفتح موادك الدراسية فقط:</p>
+      <input type="password" id="profPinInput" onkeydown="if(event.key==='Enter') verifyProfessorPin('${chosen}')" placeholder="أدخل الرمز السري (PIN)" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-center text-base font-extrabold tracking-widest outline-none focus:ring-2 focus:ring-blue-500" autofocus />
+      <p id="profPinError" class="hidden text-xs text-rose-600 font-bold text-center">❌ الرمز السري غير صحيح، تأكد من الرمز المخصص لك.</p>
+      <button onclick="verifyProfessorPin('${chosen}')" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-sm shadow">🔓 دخول إلى موادي</button>
+    </div>
+  `);
+  setTimeout(() => { const el = document.getElementById('profPinInput'); if (el) el.focus(); }, 100);
+}
+
+function verifyProfessorPin(profName) {
+  const inp = document.getElementById('profPinInput');
+  if (!inp) return;
+  const entered = inp.value.trim();
+  const expected = profName === 'ALL'
+    ? String(settings.adminPin || '2026')
+    : String((settings.profPins && settings.profPins[profName]) || '1234');
+
+  if (entered === expected || entered === String(settings.adminPin || '2026')) {
+    authenticatedProfessor = profName;
+    if (profName === 'ALL') {
+      isAdminUnlocked = true;
+      document.getElementById('lock-icon-chair').textContent = '🔓';
+      document.getElementById('lock-icon-settings').textContent = '🔓';
+      document.getElementById('lockSessionBtn').classList.remove('hidden');
+    } else {
+      sessionStorage.setItem('acc_auth_prof', profName);
+    }
+    closeModal();
+    applyProfessorLockUI();
+    showToast(`أهلاً بك أ. ${profName === 'ALL' ? 'رئيس القسم' : profName}`, '✅');
+  } else {
+    document.getElementById('profPinError').classList.remove('hidden');
+    inp.value = '';
+    inp.focus();
+  }
+}
+
+function applyProfessorLockUI() {
+  const profSelect = document.getElementById('profSelect');
+  const switchBtn = document.getElementById('switchProfBtn');
+
+  if (!authenticatedProfessor) {
+    profSelect.disabled = false;
+    switchBtn.classList.add('hidden');
+    lockProfessorFormState(true);
+    return;
+  }
+
+  profSelect.value = authenticatedProfessor;
+  // قفل قائمة الأساتذة على الأستاذ المسجل فقط (إلا إذا كان رئيس القسم)
+  profSelect.disabled = (authenticatedProfessor !== 'ALL' && !isAdminUnlocked);
+  switchBtn.classList.remove('hidden');
+
+  lockProfessorFormState(false);
+  populateProfessorSubjects();
+}
+
+function logoutProfessor() {
+  authenticatedProfessor = null;
+  sessionStorage.removeItem('acc_auth_prof');
+  const profSelect = document.getElementById('profSelect');
+  profSelect.disabled = false;
+  profSelect.value = '';
+  document.getElementById('switchProfBtn').classList.add('hidden');
+  lockProfessorFormState(true);
+  showToast('تم تسجيل الخروج من واجهة الأستاذ', '🔒');
+}
+
+function populateProfessorSubjects() {
+  const selectedProf = authenticatedProfessor || document.getElementById('profSelect').value;
   const subjectSelect = document.getElementById('subjectSelect');
   subjectSelect.innerHTML = '';
+  if (!selectedProf) return;
+
   const filtered = selectedProf === 'ALL' ? CURRICULUM : CURRICULUM.filter(c => c.professors.includes(selectedProf));
   filtered.forEach(c => {
     const opt = document.createElement('option');
@@ -987,8 +1206,10 @@ function renderSectionHistory() {
 function loadLectureForEdit(sessionId) {
   const lec = lectures.find(l => l.id === sessionId);
   if (!lec) return;
-  document.getElementById('profSelect').value = 'ALL';
-  onProfessorChange();
+  if (!authenticatedProfessor && isAdminUnlocked) {
+    authenticatedProfessor = 'ALL';
+  }
+  applyProfessorLockUI();
   document.getElementById('subjectSelect').value = lec.subjectId;
   document.getElementById('shiftSelect').value = lec.actualShift;
   onShiftOrSectionChange();
@@ -1077,9 +1298,18 @@ function startRealtimeSessionsListener() {
 }
 
 async function saveCurrentLecture() {
+  if (!authenticatedProfessor) {
+    showToast('يرجى اختيار اسمك وإدخال الرمز السري أولاً', '🔒');
+    return;
+  }
   const subId = document.getElementById('subjectSelect').value;
   const course = CURRICULUM.find(c => c.id === subId) || CURRICULUM[0];
-  const profVal = document.getElementById('profSelect').value;
+  // التحقق من أن الأستاذ يملك صلاحية هذه المادة فعلاً
+  if (authenticatedProfessor !== 'ALL' && !isAdminUnlocked && !course.professors.includes(authenticatedProfessor)) {
+    showToast('❌ غير مصرح لك بتسجيل الحضور لهذه المادة!', '🔒');
+    return;
+  }
+  const profVal = authenticatedProfessor;
   const professor = profVal === 'ALL' ? course.professors.join(' - ') : profVal;
   const shift = document.getElementById('shiftSelect').value;
   const section = document.getElementById('sectionSelect').value;
@@ -1508,6 +1738,81 @@ function saveWarningSettings() {
   saveSettingsToStorage();
   renderChairReport();
   showToast('تم حفظ ضوابط الكورس ونسب الإنذار وتحديث التقارير', '⚖️');
+}
+
+function openProfessorsPinsModal() {
+  const baseUrl = window.location.origin + window.location.pathname;
+  const profSet = new Set();
+  CURRICULUM.forEach(c => c.professors.forEach(p => profSet.add(p)));
+  const sortedProfs = Array.from(profSet).sort((a, b) => a.localeCompare(b, 'ar'));
+
+  const rowsHtml = sortedProfs.map((prof, idx) => {
+    const pin = (settings.profPins && settings.profPins[prof]) || '1234';
+    const subjects = CURRICULUM.filter(c => c.professors.includes(prof)).map(c => `${c.subject} (${c.stage})`).join('، ');
+    const directLink = `${baseUrl}?prof=${encodeURIComponent(prof)}`;
+    return `
+      <tr class="border-b border-slate-100 hover:bg-slate-50">
+        <td class="py-2 px-2 text-center font-bold text-slate-400">${idx + 1}</td>
+        <td class="py-2 px-2">
+          <div class="font-bold text-slate-800">${prof}</div>
+          <div class="text-[10px] text-slate-500">${subjects}</div>
+        </td>
+        <td class="py-2 px-2 text-center">
+          <input type="text" data-prof-pin="${prof}" value="${pin}" class="w-20 rounded-lg border border-slate-300 bg-white px-2 py-1 text-center font-mono font-bold text-xs text-blue-800" />
+        </td>
+        <td class="py-2 px-2 text-center">
+          <button onclick="copyProfDirectLink('${directLink}', '${prof}', '${pin}')" class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-lg text-[11px] font-bold">
+            📋 نسخ الرابط والرمز
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  openModal('🔑 الرموز السرية والروابط المباشرة للتدريسيين', `
+    <p class="text-xs text-slate-600">لكل تدريسي رمز سري خاص يمنعه من فتح مواد غيره. يمكنك تعديل أي رمز أو نسخ الرابط والرمز لإرساله للأستاذ عبر واتساب/تيليغرام:</p>
+    <div class="max-h-80 overflow-y-auto border border-slate-200 rounded-xl">
+      <table class="w-full text-right text-xs border-collapse">
+        <thead class="sticky top-0 bg-slate-800 text-white">
+          <tr>
+            <th class="py-2 px-2 text-center w-8">#</th>
+            <th class="py-2 px-2">الأستاذ والمواد المخصصة له</th>
+            <th class="py-2 px-2 text-center w-24">الرمز (PIN)</th>
+            <th class="py-2 px-2 text-center w-32">مشاركة</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+    <div class="flex justify-end gap-2 pt-2">
+      <button onclick="saveAllProfessorsPins()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded-xl text-xs shadow">
+        💾 حفظ تعديلات الرموز
+      </button>
+    </div>
+  `);
+}
+
+function saveAllProfessorsPins() {
+  const inputs = document.querySelectorAll('[data-prof-pin]');
+  if (!settings.profPins) settings.profPins = {};
+  inputs.forEach(inp => {
+    const prof = inp.getAttribute('data-prof-pin');
+    const val = inp.value.trim();
+    if (prof && val) settings.profPins[prof] = val;
+  });
+  saveSettingsToStorage();
+  showToast('تم حفظ الرموز السرية للتدريسيين بنجاح', '🔑');
+}
+
+function copyProfDirectLink(url, prof, pin) {
+  const msg = `نظام الحضور الإلكتروني - قسم المحاسبة\nالأستاذ: ${prof}\nالرابط المباشر لموادك: ${url}\nالرمز السري (PIN): ${pin}`;
+  const ta = document.createElement('textarea');
+  ta.value = msg;
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+  showToast(`تم نسخ رابط ورمز أ. ${prof} لإرساله له`, '📋');
 }
 
 function addNewStudent() {
