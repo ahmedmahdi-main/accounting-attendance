@@ -1246,6 +1246,7 @@ async function initFirebaseCloud() {
     }
     auth = firebase.auth();
     db = firebase.firestore();
+    db.settings({ merge: true });
 
     try {
       await auth.signInAnonymously();
@@ -1265,7 +1266,7 @@ function startRealtimeSessionsListener() {
   if (!db) return;
   if (unsubscribeSessions) unsubscribeSessions();
 
-  unsubscribeSessions = db.collection('attendance_sessions').onSnapshot(snapshot => {
+  unsubscribeSessions = db.collection('attendance_sessions').onSnapshot({ includeMetadataChanges: true }, snapshot => {
     const cloudList = [];
     snapshot.forEach(doc => {
       const ses = doc.data();
@@ -1284,10 +1285,16 @@ function startRealtimeSessionsListener() {
     if (!document.getElementById('view-chair').classList.contains('hidden')) {
       renderChairReport();
     }
-    updateCloudBadge('ok', `متصل (${lectures.length} محاضرة) 🔥`);
+    const isPending = snapshot.metadata.hasPendingWrites;
+    if (isPending) {
+      updateCloudBadge('connecting', `بانتظار الرفع للسيرفر (${lectures.length})...`);
+    } else {
+      updateCloudBadge('ok', `متصل ومُزامَن (${lectures.length} محاضرة) 🔥`);
+    }
   }, err => {
     console.error('Firestore listener error:', err);
-    updateCloudBadge('error', 'تعذر المزامنة (تحقق من Rules)');
+    updateCloudBadge('error', 'مرفوض من Firebase (افحص Rules)');
+    showToast('❌ قاعدة البيانات في Firebase ترفض الاتصال! تأكد من إنشاء Firestore وتفعيل Rules.', '❌');
   });
 }
 
@@ -1342,28 +1349,38 @@ async function saveCurrentLecture() {
 
   const saveBtn = document.getElementById('saveBtn');
   saveBtn.disabled = true;
-  saveBtn.textContent = '⏳ جاري الحفظ في السحابة...';
+  saveBtn.textContent = '⏳ جاري الرفع المؤكد للسيرفر...';
 
   try {
     if (!db) {
-      showToast('تم الحفظ محلياً فقط (يرجى ربط Firebase في إدارة البيانات للمزامنة)', '⚠️');
-      return;
+      throw new Error('Firebase غير متصل');
     }
 
-    // إرسال مع مهلة 4 ثوانٍ لضمان عدم تعليق الزر حتى في حال بطء الشبكة
-    const writePromise = db.collection('attendance_sessions').doc(sessionId).set(sessionObj);
-    const timeoutPromise = new Promise(resolve => setTimeout(() => resolve('queued'), 4000));
-    const raceResult = await Promise.race([writePromise, timeoutPromise]);
+    // إرسال مباشر مع التحقق الفعلي من وصول البيانات للسيرفر خلال 7 ثوانٍ
+    const writeTask = (async () => {
+      await db.collection('attendance_sessions').doc(sessionId).set(sessionObj);
+      await db.waitForPendingWrites();
+      return 'confirmed';
+    })();
 
-    updateCloudBadge('ok', `متصل (${lectures.length} محاضرة) 🔥`);
-    if (raceResult === 'queued') {
-      showToast('✅ تم تثبيت الحضور وجاري إكمال المزامنة بالخلفية!', '☁️');
-    } else {
-      showToast('✅ تم استلام وتثبيت الحضور في قاعدة البيانات السحابية بنجاح!', '🔥');
-    }
+    const timeoutTask = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('SERVER_UNREACHABLE')), 7000)
+    );
+
+    await Promise.race([writeTask, timeoutTask]);
+
+    updateCloudBadge('ok', `متصل ومُزامَن (${lectures.length} محاضرة) 🔥`);
+    showToast('✅ تم الرفع وتأكيد الحفظ في السيرفر السحابي بنجاح!', '🔥');
   } catch (err) {
     console.error('Save error:', err);
-    showToast('⚠️ تم الحفظ محلياً؛ تعذر الإرسال للسحابة (تحقق من Firestore Rules).', '❌');
+    updateCloudBadge('error', 'فشل الرفع للسيرفر ⚠️');
+    if (err && err.message === 'SERVER_UNREACHABLE') {
+      showToast('⚠️ لم يصل السجل للسيرفر! افتح لوحة Firebase وتأكد من إنشاء Firestore Database وتفعيل Rules.', '⚠️');
+    } else if (err && err.code === 'permission-denied') {
+      showToast('❌ تم رفض الكتابة من Firebase! غيّر Firestore Rules إلى allow read, write: if true;', '❌');
+    } else {
+      showToast(`❌ تعذر الرفع للسحابة: ${err.message || 'تحقق من إعدادات Firestore'}`, '❌');
+    }
   } finally {
     saveBtn.disabled = false;
     saveBtn.textContent = '💾 حفظ وإرسال الحضور للسحابة';
