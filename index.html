@@ -610,7 +610,6 @@
 
 <script>
 // ==================== 1. إعدادات قاعدة البيانات السحابية (Firebase Firestore) ====================
-// تم تثبيت إعدادات مشروع قسم المحاسبة السحابي ليعمل تلقائياً عند جميع التدريسيين
 const DEFAULT_FIREBASE_CONFIG = {
   apiKey: "AIzaSyBfD3SJCiamRjA3x2XgKrRu_7-FU-q9ARo",
   authDomain: "acc-attendance-56ebd.firebaseapp.com",
@@ -676,7 +675,7 @@ let settings = {
 let currentAttendanceMap = {};
 let isAdminUnlocked = false;
 let pendingProtectedTab = null;
-let authenticatedProfessor = null; // الأستاذ الذي تم التحقق من هويته حالياً
+let authenticatedProfessor = null;
 
 // الرموز السرية الافتراضية للتدريسيين (4 أرقام لكل تدريسي لضمان الخصوصية)
 const DEFAULT_PROF_PINS = {
@@ -872,7 +871,6 @@ function initProfessorView() {
   const dateInput = document.getElementById('lectureDate');
   if (!dateInput.value) dateInput.value = new Date().toISOString().split('T')[0];
 
-  // التحقق من وجود رابط مخصص للأستاذ (?prof=اسم_الاستاذ) أو جلسة محفوظة
   const urlParams = new URLSearchParams(window.location.search);
   const urlProf = urlParams.get('prof');
   const savedAuthProf = sessionStorage.getItem('acc_auth_prof');
@@ -930,7 +928,6 @@ function onProfessorSelectAttempt() {
     return;
   }
 
-  // وضع رئيس القسم يتطلب رمز رئيس القسم
   if (chosen === 'ALL') {
     if (isAdminUnlocked) {
       authenticatedProfessor = 'ALL';
@@ -949,14 +946,12 @@ function onProfessorSelectAttempt() {
     return;
   }
 
-  // إذا كان رئيس القسم قد فتح الجلسة مسبقاً أو الأستاذ مسجل دخول بالفعل
   if (isAdminUnlocked || authenticatedProfessor === chosen) {
     authenticatedProfessor = chosen;
     applyProfessorLockUI();
     return;
   }
 
-  // طلب الرمز السري الخاص بالأستاذ
   openModal(`🔐 التحقق من هوية التدريسي`, `
     <div class="space-y-3">
       <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs font-bold text-blue-900">
@@ -1011,7 +1006,6 @@ function applyProfessorLockUI() {
   }
 
   profSelect.value = authenticatedProfessor;
-  // قفل قائمة الأساتذة على الأستاذ المسجل فقط (إلا إذا كان رئيس القسم)
   profSelect.disabled = (authenticatedProfessor !== 'ALL' && !isAdminUnlocked);
   switchBtn.classList.remove('hidden');
 
@@ -1086,7 +1080,7 @@ function checkExistingSession() {
   const date = document.getElementById('lectureDate').value;
   const sessionId = `${subId}|${shift}|${section}|${date}`;
 
-  const existing = lectures.find(l => l.id === sessionId);
+  const existing = lectures.find(l => l.id === sessionId || l.id === `${subId}_${shift}_${section}_${date}`);
   const groupStudents = getFilteredStudentsForSession();
   currentAttendanceMap = {};
 
@@ -1304,7 +1298,6 @@ async function saveCurrentLecture() {
   }
   const subId = document.getElementById('subjectSelect').value;
   const course = CURRICULUM.find(c => c.id === subId) || CURRICULUM[0];
-  // التحقق من أن الأستاذ يملك صلاحية هذه المادة فعلاً
   if (authenticatedProfessor !== 'ALL' && !isAdminUnlocked && !course.professors.includes(authenticatedProfessor)) {
     showToast('❌ غير مصرح لك بتسجيل الحضور لهذه المادة!', '🔒');
     return;
@@ -1356,12 +1349,21 @@ async function saveCurrentLecture() {
       showToast('تم الحفظ محلياً فقط (يرجى ربط Firebase في إدارة البيانات للمزامنة)', '⚠️');
       return;
     }
-    await db.collection('attendance_sessions').doc(sessionId).set(sessionObj);
-    updateCloudBadge('ok', 'تم الاستلام في السحابة ✓');
-    showToast('✅ تم استلام وتثبيت الحضور في قاعدة البيانات السحابية بنجاح!', '🔥');
+
+    // إرسال مع مهلة 4 ثوانٍ لضمان عدم تعليق الزر حتى في حال بطء الشبكة
+    const writePromise = db.collection('attendance_sessions').doc(sessionId).set(sessionObj);
+    const timeoutPromise = new Promise(resolve => setTimeout(() => resolve('queued'), 4000));
+    const raceResult = await Promise.race([writePromise, timeoutPromise]);
+
+    updateCloudBadge('ok', `متصل (${lectures.length} محاضرة) 🔥`);
+    if (raceResult === 'queued') {
+      showToast('✅ تم تثبيت الحضور وجاري إكمال المزامنة بالخلفية!', '☁️');
+    } else {
+      showToast('✅ تم استلام وتثبيت الحضور في قاعدة البيانات السحابية بنجاح!', '🔥');
+    }
   } catch (err) {
     console.error('Save error:', err);
-    showToast('⚠️ تعذر الإرسال للسحابة! تحقق من قواعد الأمان (Firestore Rules).', '❌');
+    showToast('⚠️ تم الحفظ محلياً؛ تعذر الإرسال للسحابة (تحقق من Firestore Rules).', '❌');
   } finally {
     saveBtn.disabled = false;
     saveBtn.textContent = '💾 حفظ وإرسال الحضور للسحابة';
