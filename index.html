@@ -1403,7 +1403,6 @@ function evaluateSubjectAlert(absentLectures, stage) {
   const hrsPerLec = Number(settings.lectureHours) || 3;
   const totalSubjectHours = weeks * hrsPerLec; // 3 × 15 = 45 ساعة
   const absentHours = absentLectures * hrsPerLec;
-  const pct = totalSubjectHours > 0 ? (absentHours / totalSubjectHours) * 100 : 0;
 
   const th = getStageThresholds(stage);
   const warn1HoursReq = Math.ceil((totalSubjectHours * th.w1) / 100); // 45×8% = 3.6 -> 4 ساعات (محاضرتان)
@@ -1411,18 +1410,29 @@ function evaluateSubjectAlert(absentLectures, stage) {
   const expelHoursReq = Math.ceil((totalSubjectHours * th.expel) / 100); // 45×14% = 6.3 -> 7 ساعات (4 محاضرات)
 
   // احتساب عدد المحاضرات المطلوبة لكل عتبة لضمان التطابق الدقيق:
-  // محاضرتان = إنذار أولي | 3 محاضرات = إنذار نهائي | 4 محاضرات فأكثر = فصل بالغياب
+  // محاضرتان = إنذار أولي (8%) | 3 محاضرات = إنذار نهائي (10%) | 4 محاضرات فأكثر = فصل بالغياب (14%)
   const warn1LecsReq = Math.max(2, Math.ceil(warn1HoursReq / hrsPerLec));
   const warn2LecsReq = Math.max(3, Math.ceil(warn2HoursReq / hrsPerLec));
   const expelLecsReq = Math.max(4, Math.ceil(expelHoursReq / hrsPerLec));
 
   let statusCode = 'OK', statusLabel = 'منتظم', rank = 0;
+  let pct = totalSubjectHours > 0 ? (absentHours / totalSubjectHours) * 100 : 0;
+
   if (absentLectures >= expelLecsReq) {
-    statusCode = 'EXPELLED'; statusLabel = 'فصل بالغياب'; rank = 3;
+    statusCode = 'EXPELLED';
+    statusLabel = 'فصل بالغياب';
+    rank = 3;
+    pct = th.expel + ((absentLectures - expelLecsReq) * (hrsPerLec / totalSubjectHours) * 100);
   } else if (absentLectures >= warn2LecsReq) {
-    statusCode = 'WARN2'; statusLabel = 'إنذار نهائي'; rank = 2;
+    statusCode = 'WARN2';
+    statusLabel = 'إنذار نهائي';
+    rank = 2;
+    pct = th.w2;
   } else if (absentLectures >= warn1LecsReq) {
-    statusCode = 'WARN1'; statusLabel = 'إنذار أولي'; rank = 1;
+    statusCode = 'WARN1';
+    statusLabel = 'إنذار أولي';
+    rank = 1;
+    pct = th.w1;
   }
 
   return {
